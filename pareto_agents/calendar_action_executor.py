@@ -194,15 +194,24 @@ class CalendarActionExecutor:
             if event_request.end_datetime:
                 end_dt = self.timezone_service.parse_datetime_string(event_request.end_datetime)
             
+            # Construct event body for Google Calendar API
+            event_body = {
+                'summary': event_request.title,
+                'description': event_request.description or "",
+                'location': event_request.location or "",
+                'start': {
+                    'dateTime': start_dt.isoformat(),
+                    'timeZone': self.timezone_service.get_timezone_name()
+                },
+                'end': {
+                    'dateTime': (end_dt if end_dt else start_dt).isoformat(),
+                    'timeZone': self.timezone_service.get_timezone_name()
+                },
+                'attendees': [{'email': email} for email in event_request.attendees or []]
+            }
+            
             # Create event
-            result = self.calendar_client.create_event(
-                title=event_request.title,
-                start_datetime=start_dt,
-                end_datetime=end_dt,
-                description=event_request.description or "",
-                location=event_request.location or "",
-                attendees=event_request.attendees or []
-            )
+            result = self.calendar_client.create_event(event_body)
             
             if result.get('success'):
                 # Format response message using parsed datetime (not LLM's string which may have wrong date)

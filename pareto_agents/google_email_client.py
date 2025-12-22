@@ -71,15 +71,16 @@ class GoogleEmailClient:
                 logger.error("❌ Could not load Google credentials")
                 return False
             
-            # Check if it's a service account or OAuth credentials
-            if creds_dict.get('type') == 'service_account':
-                logger.info("✅ Using service account credentials")
+            # Check if it's a service account (look for private_key) or OAuth credentials
+            if creds_dict.get('private_key') and creds_dict.get('client_email'):
+                logger.info("✅ Using service account credentials (detected via private_key)")
                 self.credentials = Credentials.from_service_account_info(
                     creds_dict,
                     scopes=SCOPES
                 )
             else:
-                logger.info("✅ Using OAuth credentials")
+                logger.info("✅ Using OAuth credentials (default fallback)")
+                # This will likely fail if the JSON is not a full OAuth token, but it's the correct class to use
                 self.credentials = UserCredentials.from_authorized_user_info(
                     creds_dict,
                     scopes=SCOPES
