@@ -21,7 +21,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 # Import the config loader using RELATIVE IMPORT
-from .config_loader import get_google_credentials, get_user_config
+from .config_loader import get_google_client_secrets, get_google_user_token, get_user_config
 
 logger = logging.getLogger(__name__)
 
@@ -64,27 +64,25 @@ class GoogleCalendarClient:
             True if credentials loaded, False otherwise
         """
         try:
-            # Get credentials using config_loader
-            creds_dict = get_google_credentials()
+            # 1. Get the user's token (jan_avoccado_pareto.json content)
+            token_dict = get_google_user_token()
+            client_secrets = get_google_client_secrets()
             
-            if not creds_dict:
-                logger.error("❌ Could not load Google credentials")
+            if not token_dict or not client_secrets:
+                logger.error("❌ Could not load Google user token or client secrets")
                 return False
             
-            # Check if it's a service account (look for private_key) or OAuth credentials
-            if creds_dict.get('private_key') and creds_dict.get('client_email'):
-                logger.info("✅ Using service account credentials (detected via private_key)")
-                self.credentials = Credentials.from_service_account_info(
-                    creds_dict,
-                    scopes=SCOPES
-                )
-            else:
-                logger.info("✅ Using OAuth credentials (default fallback)")
-                # This will likely fail if the JSON is not a full OAuth token, but it's the correct class to use
-                self.credentials = UserCredentials.from_authorized_user_info(
-                    creds_dict,
-                    scopes=SCOPES
-                )
+            # 2. Load as UserCredentials (which is what the token.json contains)
+            # The token file is the result of the OAuth flow, so it's a UserCredentials object.
+            logger.info("✅ Using OAuth User Token credentials")
+            
+            # Merge client secrets into token dict for refresh to work
+            creds_dict = {**token_dict, **client_secrets.get('installed', {})}
+            
+            self.credentials = UserCredentials.from_authorized_user_info(
+                creds_dict,
+                scopes=SCOPES
+            )
             
             return True
             

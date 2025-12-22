@@ -48,6 +48,10 @@ class TimezoneService:
             logger.error(f"Error getting current time: {str(e)}")
             return {}
     
+    def get_timezone_name(self) -> str:
+        """Get the timezone name (e.g., Europe/Zagreb)"""
+        return self.TIMEZONE_CET
+    
     def parse_datetime_string(self, datetime_str: str) -> datetime:
         """
         Parse datetime string in multiple formats
