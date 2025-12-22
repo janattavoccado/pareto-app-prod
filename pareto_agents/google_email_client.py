@@ -1,297 +1,343 @@
 """
-Google Gmail API Client - FIXED
-Handles email operations using Google API with user-specific credentials
-Includes proper error handling and API response verification
+Google Email Client - Updated Version
 
-File location: pareto_agents/google_email_client.py
+Uses config_loader to read credentials from:
+- Base64 environment variables (Heroku)
+- JSON files (Local Windows development)
 """
 
-import logging
 import os
 import json
-from typing import Optional, List, Dict, Any
-from google.auth.transport.requests import Request
+import logging
+from pathlib import Path
+from typing import Optional, Dict, List
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import base64
+
 from google.oauth2.service_account import Credentials
 from google.oauth2.credentials import Credentials as UserCredentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.exceptions import RefreshError
-import googleapiclient.discovery
+from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+# Import the config loader
+from config_loader import get_google_credentials, get_user_config
+
 logger = logging.getLogger(__name__)
+
+# Gmail API scopes
+SCOPES = ['https://www.googleapis.com/auth/gmail.send']
 
 
 class GoogleEmailClient:
     """
-    Client for interacting with Google Gmail API
-    Handles email operations with user-specific OAuth credentials
+    Google Gmail API client with support for:
+    - Base64 environment variables (Heroku)
+    - JSON files (Local development)
     """
     
-    # Gmail API scopes
-    SCOPES = [
-        'https://www.googleapis.com/auth/gmail.readonly',
-        'https://www.googleapis.com/auth/gmail.send',
-        'https://www.googleapis.com/auth/gmail.modify'
-    ]
-    
-    def __init__(self, token_path: str, client_secrets_path: str = "configurations/client_secrets.json"):
+    def __init__(self, user_email: str = 'jan_avoccado_pareto'):
         """
-        Initialize Google Email Client with user's token
+        Initialize Google Email client.
         
         Args:
-            token_path (str): Path to user's Google OAuth token file
-            client_secrets_path (str): Path to client_secrets.json from Google Console
+            user_email: User identifier for token storage
         """
-        self.token_path = token_path
-        self.client_secrets_path = client_secrets_path
-        self.credentials = None
+        self.user_email = user_email
+        self.token_path = f'configurations/tokens/{user_email}.json'
         self.service = None
-        self._authenticate()
-    
-    def _authenticate(self) -> None:
-        """
-        Authenticate with Google using user's token
+        self.credentials = None
         
-        Raises:
-            FileNotFoundError: If token or client secrets file not found
-            RefreshError: If token refresh fails
+        logger.info(f"Initializing Google Email client for {user_email}")
+        
+        # Load credentials
+        self._load_credentials()
+        
+        if self.credentials:
+            self._build_service()
+    
+    def _load_credentials(self) -> bool:
+        """
+        Load Google credentials from config loader.
+        
+        Returns:
+            True if credentials loaded, False otherwise
         """
         try:
-            # Check if token file exists
-            if not os.path.exists(self.token_path):
-                raise FileNotFoundError(f"Token file not found: {self.token_path}")
+            # Get credentials using config_loader
+            creds_dict = get_google_credentials()
             
-            # Load user credentials from token file
-            with open(self.token_path, 'r') as f:
-                token_data = json.load(f)
+            if not creds_dict:
+                logger.error("❌ Could not load Google credentials")
+                return False
             
-            # Create credentials from token
-            self.credentials = UserCredentials.from_authorized_user_info(token_data, self.SCOPES)
+            # Check if it's a service account or OAuth credentials
+            if creds_dict.get('type') == 'service_account':
+                logger.info("✅ Using service account credentials")
+                self.credentials = Credentials.from_service_account_info(
+                    creds_dict,
+                    scopes=SCOPES
+                )
+            else:
+                logger.info("✅ Using OAuth credentials")
+                self.credentials = UserCredentials.from_authorized_user_info(
+                    creds_dict,
+                    scopes=SCOPES
+                )
             
-            # Refresh token if expired
-            if self.credentials.expired and self.credentials.refresh_token:
-                request = Request()
-                self.credentials.refresh(request)
-                logger.info(f"Token refreshed for {self.token_path}")
+            return True
             
-            # Build Gmail service
-            self.service = googleapiclient.discovery.build('gmail', 'v1', credentials=self.credentials)
-            logger.info(f"Gmail service initialized with token: {self.token_path}")
-        
-        except FileNotFoundError as e:
-            logger.error(f"Authentication failed: {str(e)}")
-            raise
-        
-        except RefreshError as e:
-            logger.error(f"Token refresh failed: {str(e)}")
-            raise
-        
         except Exception as e:
-            logger.error(f"Authentication error: {str(e)}")
-            raise
+            logger.error(f"❌ Error loading credentials: {e}")
+            return False
     
-    def get_inbox_count(self) -> int:
+    def _build_service(self) -> bool:
         """
-        Get count of unread emails in inbox
+        Build Google Gmail service.
         
         Returns:
-            int: Number of unread emails
+            True if service built, False otherwise
         """
         try:
-            if not self.service:
-                logger.error("Gmail service not initialized")
-                return 0
-            
-            results = self.service.users().labels().get(
-                userId='me',
-                id='INBOX'
-            ).execute()
-            
-            unread_count = results.get('messagesUnread', 0)
-            logger.info(f"Unread emails in inbox: {unread_count}")
-            return unread_count
-        
-        except HttpError as e:
-            logger.error(f"Error getting inbox count: {str(e)}")
-            return 0
-    
-    def list_emails(self, query: str = "is:unread", max_results: int = 10) -> List[Dict[str, Any]]:
-        """
-        List emails matching query
-        
-        Args:
-            query (str): Gmail search query (e.g., "is:unread", "from:example@gmail.com")
-            max_results (int): Maximum number of results to return
-            
-        Returns:
-            list: List of email dictionaries with id and snippet
-        """
-        try:
-            if not self.service:
-                logger.error("Gmail service not initialized")
-                return []
-            
-            results = self.service.users().messages().list(
-                userId='me',
-                q=query,
-                maxResults=max_results
-            ).execute()
-            
-            messages = results.get('messages', [])
-            logger.info(f"Found {len(messages)} emails matching query: {query}")
-            
-            emails = []
-            for message in messages:
-                msg = self.service.users().messages().get(
-                    userId='me',
-                    id=message['id'],
-                    format='metadata',
-                    metadataHeaders=['From', 'Subject', 'Date']
-                ).execute()
-                
-                headers = {h['name']: h['value'] for h in msg['payload'].get('headers', [])}
-                
-                emails.append({
-                    'id': message['id'],
-                    'from': headers.get('From', 'Unknown'),
-                    'subject': headers.get('Subject', 'No Subject'),
-                    'date': headers.get('Date', 'Unknown'),
-                    'snippet': msg.get('snippet', '')
-                })
-            
-            return emails
-        
-        except HttpError as e:
-            logger.error(f"Error listing emails: {str(e)}")
-            return []
-    
-    def send_email(self, to: str, subject: str, body: str) -> bool:
-        """
-        Send an email via Gmail API
-        
-        Args:
-            to (str): Recipient email address
-            subject (str): Email subject
-            body (str): Email body (plain text)
-            
-        Returns:
-            bool: True if email sent successfully, False otherwise
-        """
-        try:
-            if not self.service:
-                logger.error("Gmail service not initialized - cannot send email")
+            if not self.credentials:
+                logger.error("❌ No credentials available to build service")
                 return False
             
-            if not to or not subject or body is None:
-                logger.error(f"Invalid email parameters - to: {to}, subject: {subject}, body length: {len(body) if body else 0}")
-                return False
+            self.service = build('gmail', 'v1', credentials=self.credentials)
+            logger.info("✅ Google Gmail service built successfully")
+            return True
             
-            from email.mime.text import MIMEText
-            import base64
+        except Exception as e:
+            logger.error(f"❌ Error building Gmail service: {e}")
+            return False
+    
+    def get_sender_email(self) -> Optional[str]:
+        """
+        Get sender email address from user config.
+        
+        Returns:
+            Email address or None
+        """
+        try:
+            user_config = get_user_config()
             
-            # Create MIME message
-            message = MIMEText(body)
+            if not user_config:
+                logger.error("❌ Could not load user configuration")
+                return None
+            
+            # Get email for this user
+            if self.user_email in user_config:
+                email = user_config[self.user_email].get('email')
+                if email:
+                    logger.info(f"✅ Sender email found: {email}")
+                    return email
+            
+            logger.error(f"❌ Email not found for user {self.user_email}")
+            return None
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting sender email: {e}")
+            return None
+    
+    def _create_message(self, to: str, subject: str, message_text: str, 
+                       html: bool = False) -> Optional[Dict]:
+        """
+        Create a message for sending via Gmail API.
+        
+        Args:
+            to: Recipient email address
+            subject: Email subject
+            message_text: Email body (plain text or HTML)
+            html: Whether message_text is HTML
+            
+        Returns:
+            Message dictionary or None
+        """
+        try:
+            sender = self.get_sender_email()
+            if not sender:
+                logger.error("❌ Could not get sender email")
+                return None
+            
+            message = MIMEMultipart('alternative')
             message['to'] = to
+            message['from'] = sender
             message['subject'] = subject
+            
+            if html:
+                message.attach(MIMEText(message_text, 'html'))
+            else:
+                message.attach(MIMEText(message_text, 'plain'))
             
             # Encode message
             raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
-            send_message = {'raw': raw_message}
             
-            logger.info(f"Attempting to send email to {to} with subject: {subject}")
-            logger.debug(f"Email body length: {len(body)} characters")
+            return {'raw': raw_message}
             
-            # Send email via Gmail API
-            result = self.service.users().messages().send(
-                userId='me',
-                body=send_message
-            ).execute()
-            
-            # Verify result
-            if result and 'id' in result:
-                message_id = result['id']
-                logger.info(
-                    f"✅ Email successfully sent to {to} | "
-                    f"Subject: {subject} | "
-                    f"Message ID: {message_id}"
-                )
-                return True
-            else:
-                logger.error(f"Gmail API returned unexpected response: {result}")
-                return False
-        
-        except HttpError as e:
-            logger.error(f"❌ Gmail API HttpError when sending email: {str(e)}")
-            logger.error(f"Error details: {e.content if hasattr(e, 'content') else 'No details'}")
-            return False
-        
         except Exception as e:
-            logger.error(f"❌ Unexpected error sending email: {str(e)}", exc_info=True)
-            return False
+            logger.error(f"❌ Error creating message: {e}")
+            return None
     
-    def get_email_body(self, message_id: str) -> str:
+    def send_email(self, to: str, subject: str, message_text: str, 
+                  html: bool = False) -> Optional[Dict]:
         """
-        Get full email body
+        Send an email via Gmail API.
         
         Args:
-            message_id (str): Gmail message ID
+            to: Recipient email address
+            subject: Email subject
+            message_text: Email body (plain text or HTML)
+            html: Whether message_text is HTML
             
         Returns:
-            str: Email body text
+            Sent message or None
         """
         try:
             if not self.service:
-                logger.error("Gmail service not initialized")
-                return ""
+                logger.error("❌ Gmail service not initialized")
+                return None
             
-            message = self.service.users().messages().get(
+            logger.info(f"Sending email to {to}: {subject}")
+            
+            # Create message
+            message = self._create_message(to, subject, message_text, html)
+            if not message:
+                logger.error("❌ Could not create message")
+                return None
+            
+            # Send message
+            sent_message = self.service.users().messages().send(
                 userId='me',
-                id=message_id,
-                format='full'
+                body=message
             ).execute()
             
-            # Extract body from message
-            if 'parts' in message['payload']:
-                parts = message['payload']['parts']
-                data = parts[0]['body'].get('data', '')
+            logger.info(f"✅ Email sent successfully (ID: {sent_message['id']})")
+            return sent_message
+            
+        except HttpError as e:
+            logger.error(f"❌ Google API error: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"❌ Error sending email: {e}")
+            return None
+    
+    def send_email_with_attachments(self, to: str, subject: str, 
+                                   message_text: str, attachments: List[str] = None,
+                                   html: bool = False) -> Optional[Dict]:
+        """
+        Send an email with attachments via Gmail API.
+        
+        Args:
+            to: Recipient email address
+            subject: Email subject
+            message_text: Email body (plain text or HTML)
+            attachments: List of file paths to attach
+            html: Whether message_text is HTML
+            
+        Returns:
+            Sent message or None
+        """
+        try:
+            if not self.service:
+                logger.error("❌ Gmail service not initialized")
+                return None
+            
+            sender = self.get_sender_email()
+            if not sender:
+                logger.error("❌ Could not get sender email")
+                return None
+            
+            logger.info(f"Sending email with attachments to {to}: {subject}")
+            
+            # Create multipart message
+            message = MIMEMultipart()
+            message['to'] = to
+            message['from'] = sender
+            message['subject'] = subject
+            
+            # Add body
+            if html:
+                message.attach(MIMEText(message_text, 'html'))
             else:
-                data = message['payload']['body'].get('data', '')
+                message.attach(MIMEText(message_text, 'plain'))
             
-            if data:
-                import base64
-                text = base64.urlsafe_b64decode(data).decode('utf-8')
-                return text
+            # Add attachments
+            if attachments:
+                from email.mime.base import MIMEBase
+                from email import encoders
+                
+                for attachment_path in attachments:
+                    try:
+                        path = Path(attachment_path)
+                        if path.exists():
+                            with open(path, 'rb') as attachment:
+                                part = MIMEBase('application', 'octet-stream')
+                                part.set_payload(attachment.read())
+                                encoders.encode_base64(part)
+                                part.add_header(
+                                    'Content-Disposition',
+                                    f'attachment; filename= {path.name}'
+                                )
+                                message.attach(part)
+                                logger.info(f"✅ Attached: {path.name}")
+                    except Exception as e:
+                        logger.error(f"❌ Error attaching {attachment_path}: {e}")
             
-            return ""
-        
-        except HttpError as e:
-            logger.error(f"Error getting email body: {str(e)}")
-            return ""
-    
-    def mark_as_read(self, message_id: str) -> bool:
-        """
-        Mark email as read
-        
-        Args:
-            message_id (str): Gmail message ID
+            # Encode and send
+            raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
             
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        try:
-            if not self.service:
-                logger.error("Gmail service not initialized")
-                return False
-            
-            self.service.users().messages().modify(
+            sent_message = self.service.users().messages().send(
                 userId='me',
-                id=message_id,
-                body={'removeLabelIds': ['UNREAD']}
+                body={'raw': raw_message}
             ).execute()
             
-            logger.info(f"Email {message_id} marked as read")
-            return True
-        
+            logger.info(f"✅ Email with attachments sent (ID: {sent_message['id']})")
+            return sent_message
+            
         except HttpError as e:
-            logger.error(f"Error marking email as read: {str(e)}")
-            return False
+            logger.error(f"❌ Google API error: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"❌ Error sending email with attachments: {e}")
+            return None
+
+
+# Convenience function
+def get_email_client(user_email: str = 'jan_avoccado_pareto') -> Optional[GoogleEmailClient]:
+    """
+    Get initialized Google Email client.
+    
+    Args:
+        user_email: User identifier
+        
+    Returns:
+        GoogleEmailClient instance or None
+    """
+    try:
+        client = GoogleEmailClient(user_email)
+        if client.service:
+            return client
+        return None
+    except Exception as e:
+        logger.error(f"❌ Error creating email client: {e}")
+        return None
+
+
+if __name__ == '__main__':
+    # Test script
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    client = get_email_client()
+    if client:
+        # Test sending email
+        result = client.send_email(
+            to='test@example.com',
+            subject='Test Email',
+            message_text='This is a test email from Pareto Agent.'
+        )
+        if result:
+            print(f"Email sent successfully: {result['id']}")
