@@ -197,22 +197,44 @@ class ConfigLoader:
         """
         Get Chatwoot credentials from environment.
         
+        Supports both naming conventions:
+        - Standard: CHATWOOT_API_KEY, CHATWOOT_BASE_URL
+        - Alternative: CHATWOOT_ACCESS_KEY, CHATWOOT_API_URL
+        
         Returns:
             Dictionary with Chatwoot credentials
         """
+        # Try standard names first
+        api_key = os.getenv('CHATWOOT_API_KEY')
+        base_url = os.getenv('CHATWOOT_BASE_URL')
+        
+        # Fall back to alternative names
+        if not api_key:
+            api_key = os.getenv('CHATWOOT_ACCESS_KEY')
+        if not base_url:
+            base_url = os.getenv('CHATWOOT_API_URL')
+        
+        # Use default if still not found
+        if not base_url:
+            base_url = 'https://pareto-demo-chatwoot-chatwoot.pixpji.easypanel.host'
+        
         creds = {
-            'api_key': os.getenv('CHATWOOT_API_KEY'),
+            'api_key': api_key,
             'account_id': os.getenv('CHATWOOT_ACCOUNT_ID'),
             'inbox_id': os.getenv('CHATWOOT_INBOX_ID'),
-            'base_url': os.getenv('CHATWOOT_BASE_URL', 'https://pareto-demo-chatwoot-chatwoot.pixpji.easypanel.host'),
+            'base_url': base_url,
         }
         
         if creds['api_key'] and creds['account_id']:
             logger.info("✅ Chatwoot credentials found in environment")
+            logger.info(f"   API Key source: {'CHATWOOT_API_KEY' if os.getenv('CHATWOOT_API_KEY') else 'CHATWOOT_ACCESS_KEY'}")
+            logger.info(f"   Base URL source: {'CHATWOOT_BASE_URL' if os.getenv('CHATWOOT_BASE_URL') else 'CHATWOOT_API_URL'}")
             return creds
         
         logger.error("❌ Chatwoot credentials not found!")
-        logger.error("   Set CHATWOOT_API_KEY and CHATWOOT_ACCOUNT_ID env vars")
+        logger.error("   Set CHATWOOT_API_KEY (or CHATWOOT_ACCESS_KEY) env var")
+        logger.error("   Set CHATWOOT_ACCOUNT_ID env var")
+        logger.error("   Optionally set CHATWOOT_BASE_URL (or CHATWOOT_API_URL)")
         return creds
     
     @staticmethod
