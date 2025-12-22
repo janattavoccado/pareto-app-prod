@@ -1,0 +1,16 @@
+{
+  "token": "ya29.a0Aa7pCA8Cb3PJ8ROEbMERvy8eozOuP_3zSHtDXYSGsgicA-_MbLo5JUE9wdoIq9xNhNvWSwCsmcYst5eVNwQ4JzX-WtF_f9vdvNCRsaS_9GyrSAMZtTfX4dc5RoS_shXj6LuBlFa_aZXDnDq9DkFO9yp2PydDc2e_QiIs1WtNPmm1ZTKcfVXi3Xww9EwpGW3xdSs75GS5aCgYKAVUSARISFQHGX2MiQpxgG5v1YmnrMgRD83O0lQ0207",
+  "refresh_token": "1//03hyGO2tc_X6ICgYIARAAGAMSNwF-L9IrAxIaikKLDgWqfgYyMFnAixKlY6-Damu7v6XEpeuyOa65WpcjIF659D3RwYPcZT17pts",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "client_id": "480937819418-n27fr819mri2vt2902e1ti7tg65s9mes.apps.googleusercontent.com",
+  "client_secret": "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",
+  "scopes": [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/calendar.events"
+  ],
+  "type": "authorized_user",
+  "email": null
+}

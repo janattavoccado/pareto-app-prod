@@ -1,0 +1,371 @@
+"""
+Email Action Executor with Pydantic Models - MODELRESPONSE FIXED
+Parses agent responses and executes Gmail API calls
+Handles ModelResponse objects from openai-agents
+
+File location: pareto_agents/email_action_executor.py
+"""
+
+import logging
+import re
+from typing import Optional, Dict, Any
+from pydantic import BaseModel, EmailStr, Field
+
+from .google_email_client import GoogleEmailClient
+from .user_manager import get_user_manager
+
+logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Pydantic Models
+# ============================================================================
+
+class SendEmailRequest(BaseModel):
+    """Structured email send request"""
+    recipient_email: EmailStr
+    subject: str
+    body: str
+    sender_email: Optional[EmailStr] = None
+    
+    class Config:
+        str_strip_whitespace = True
+
+
+class CheckUnreadRequest(BaseModel):
+    """Structured unread email check request"""
+    max_results: int = Field(default=5, ge=1, le=100)
+
+
+class ListEmailsRequest(BaseModel):
+    """Structured email list request"""
+    query: str = Field(default="is:unread")
+    max_results: int = Field(default=10, ge=1, le=100)
+
+
+class ActionResult(BaseModel):
+    """Generic action result"""
+    success: bool
+    action: str
+    response: str
+    executed: bool = False
+    data: Optional[Dict[str, Any]] = None
+
+
+# ============================================================================
+# Email Action Executor
+# ============================================================================
+
+class EmailActionExecutor:
+    """
+    Executes email actions based on agent responses
+    Parses agent responses and calls Gmail API
+    """
+    
+    def __init__(self, phone_number: str):
+        """
+        Initialize executor with user's phone number
+        
+        Args:
+            phone_number (str): User's phone number (session ID)
+        """
+        self.phone_number = phone_number
+        self.user_manager = get_user_manager()
+        self.email_client = None
+        self._initialize_email_client()
+    
+    def _initialize_email_client(self) -> None:
+        """Initialize Gmail API client with user's credentials"""
+        try:
+            user_data = self.user_manager.get_user_by_phone(self.phone_number)
+            
+            if not user_data:
+                logger.error(f"User not found: {self.phone_number}")
+                return
+            
+            token_path = user_data.get("google_token_path")
+            
+            if not token_path:
+                logger.error(f"No Google token path for user: {self.phone_number}")
+                return
+            
+            self.email_client = GoogleEmailClient(token_path)
+            logger.info(f"Email client initialized for {self.phone_number}")
+        
+        except Exception as e:
+            logger.error(f"Error initializing email client: {str(e)}")
+    
+    def _extract_text_from_response(self, response: Any) -> str:
+        """
+        Extract plain text from agent response
+        Handles ModelResponse objects and other types
+        
+        Args:
+            response: Agent response (could be ModelResponse, string, etc.)
+            
+        Returns:
+            str: Plain text content
+        """
+        try:
+            # If it's a ModelResponse object, extract text from output
+            if hasattr(response, 'output'):
+                output = response.output
+                if isinstance(output, list) and len(output) > 0:
+                    first_output = output[0]
+                    # Extract text from ResponseOutputMessage
+                    if hasattr(first_output, 'content'):
+                        content = first_output.content
+                        if isinstance(content, list) and len(content) > 0:
+                            text_content = content[0]
+                            if hasattr(text_content, 'text'):
+                                return text_content.text
+                            elif isinstance(text_content, dict) and 'text' in text_content:
+                                return text_content['text']
+                            else:
+                                return str(text_content)
+            
+            # Fallback: convert to string
+            return str(response)
+        
+        except Exception as e:
+            logger.warning(f"Error extracting text from response: {str(e)}")
+            return str(response)
+    
+    def _detect_action_type(self, response_text: str) -> str:
+        """
+        Detect the type of email action from response text
+        
+        Args:
+            response_text (str): Agent response text
+            
+        Returns:
+            str: Action type (send_email, check_unread, list_emails, etc.)
+        """
+        response_lower = response_text.lower()
+        
+        if any(word in response_lower for word in ['send', 'sent', 'sending', 'email to']):
+            return 'send_email'
+        elif any(word in response_lower for word in ['unread', 'check', 'inbox']):
+            return 'check_unread'
+        elif any(word in response_lower for word in ['list', 'search', 'find']):
+            return 'list_emails'
+        else:
+            return 'unknown'
+    
+    def _parse_send_email_action(self, response_text: str) -> Optional[SendEmailRequest]:
+        """
+        Parse send email action from agent response
+        
+        Args:
+            response_text (str): Agent response text
+            
+        Returns:
+            SendEmailRequest or None if parsing fails
+        """
+        try:
+            logger.info(f"Parsing send email action from: {response_text[:100]}...")
+            
+            # Get user email as default sender
+            user_data = self.user_manager.get_user_by_phone(self.phone_number)
+            default_sender = user_data.get("email") if user_data else None
+            
+            # Extract recipient email
+            recipient_match = re.search(
+                r'(?:to|recipient|email to|send to)\s+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
+                response_text,
+                re.IGNORECASE
+            )
+            recipient = recipient_match.group(1) if recipient_match else None
+            
+            if not recipient:
+                logger.warning("Could not extract recipient email")
+                return None
+            
+            logger.info(f"Extracted recipient: {recipient}")
+            
+            # Extract sender (optional)
+            sender_match = re.search(
+                r'(?:from|sender)\s+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
+                response_text,
+                re.IGNORECASE
+            )
+            sender = sender_match.group(1) if sender_match else default_sender
+            
+            if sender:
+                logger.info(f"Extracted sender: {sender}")
+            else:
+                logger.info("Extracted sender: None")
+            
+            # Extract subject - try multiple patterns
+            subject = None
+            subject_patterns = [
+                r'(?:subject|subject:)\s*["\']?([^"\'\n]+)["\']?(?:\s|$)',
+                r'subject:\s*([^\n]+)',
+                r'with subject\s+["\']?([^"\'\n]+)["\']?',
+                r'subject\s+["\']?([^"\'\n]+)["\']?',
+            ]
+            
+            for pattern in subject_patterns:
+                subject_match = re.search(pattern, response_text, re.IGNORECASE)
+                if subject_match:
+                    subject = subject_match.group(1).strip()
+                    if subject:
+                        break
+            
+            if not subject:
+                logger.warning("Could not extract subject")
+                subject = "No Subject"
+            else:
+                logger.info(f"Extracted subject: {subject}")
+            
+            # Extract body - try multiple patterns
+            body = None
+            body_patterns = [
+                r'(?:content|body|message):\s*["\']?([^"\'\n]+)["\']?(?:\s|$)',
+                r'content:\s*([^\n]+)',
+                r'body:\s*([^\n]+)',
+                r'message:\s*([^\n]+)',
+                r'and content:\s*([^\n]+)',
+                r'and body:\s*([^\n]+)',
+                r'with content\s+["\']?([^"\'\n]+)["\']?',
+            ]
+            
+            for pattern in body_patterns:
+                body_match = re.search(pattern, response_text, re.IGNORECASE)
+                if body_match:
+                    body = body_match.group(1).strip()
+                    if body:
+                        break
+            
+            if not body:
+                logger.warning("Could not extract body, using empty body")
+                body = ""
+            else:
+                logger.info(f"Extracted body: {body[:50]}...")
+            
+            # Create and validate request
+            send_request = SendEmailRequest(
+                recipient_email=recipient,
+                subject=subject,
+                body=body,
+                sender_email=sender
+            )
+            
+            return send_request
+        
+        except Exception as e:
+            logger.error(f"Error parsing send email action: {str(e)}")
+            return None
+    
+    def execute_send_email(self, request: SendEmailRequest) -> ActionResult:
+        """
+        Execute send email action
+        
+        Args:
+            request (SendEmailRequest): Email send request
+            
+        Returns:
+            ActionResult: Execution result
+        """
+        try:
+            if not self.email_client:
+                logger.error("Email client not initialized")
+                return ActionResult(
+                    success=False,
+                    action="send_email",
+                    response="❌ Email client not initialized",
+                    executed=False
+                )
+            
+            # Send email
+            success = self.email_client.send_email(
+                to=request.recipient_email,
+                subject=request.subject,
+                body=request.body
+            )
+            
+            if success:
+                response = (
+                    f"✅ Email sent successfully to {request.recipient_email} "
+                    f"with subject: {request.subject}"
+                )
+                logger.info(response)
+                return ActionResult(
+                    success=True,
+                    action="send_email",
+                    response=response,
+                    executed=True,
+                    data={
+                        "recipient": request.recipient_email,
+                        "subject": request.subject,
+                        "body_length": len(request.body)
+                    }
+                )
+            else:
+                response = f"❌ Failed to send email to {request.recipient_email}"
+                logger.error(response)
+                return ActionResult(
+                    success=False,
+                    action="send_email",
+                    response=response,
+                    executed=False
+                )
+        
+        except Exception as e:
+            logger.error(f"Error executing send email: {str(e)}")
+            return ActionResult(
+                success=False,
+                action="send_email",
+                response=f"❌ Error: {str(e)}",
+                executed=False
+            )
+    
+    def execute_action(self, response: Any) -> ActionResult:
+        """
+        Execute action based on agent response
+        
+        Args:
+            response: Agent response (ModelResponse, string, etc.)
+            
+        Returns:
+            ActionResult: Execution result
+        """
+        try:
+            # Extract text from response
+            response_text = self._extract_text_from_response(response)
+            logger.info(f"Extracted response text: {response_text[:100]}...")
+            
+            # Detect action type
+            action_type = self._detect_action_type(response_text)
+            logger.info(f"Detected action type: {action_type}")
+            
+            # Execute appropriate action
+            if action_type == 'send_email':
+                send_request = self._parse_send_email_action(response_text)
+                
+                if send_request:
+                    return self.execute_send_email(send_request)
+                else:
+                    return ActionResult(
+                        success=False,
+                        action="send_email",
+                        response="❌ Could not parse email send request",
+                        executed=False
+                    )
+            
+            else:
+                return ActionResult(
+                    success=False,
+                    action=action_type,
+                    response=f"❌ Action type '{action_type}' not yet implemented",
+                    executed=False
+                )
+        
+        except Exception as e:
+            logger.error(f"Error executing action: {str(e)}", exc_info=True)
+            return ActionResult(
+                success=False,
+                action="unknown",
+                response=f"❌ Error: {str(e)}",
+                executed=False
+            )
