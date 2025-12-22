@@ -213,7 +213,7 @@ class CalendarActionExecutor:
             # Create event
             result = self.calendar_client.create_event(event_body)
             
-            if result.get('success'):
+            if result and result.get('success'):
                 # Format response message using parsed datetime (not LLM's string which may have wrong date)
                 formatted_date = start_dt.strftime('%d %B %Y at %H:%M')
                 response_msg = f"✅ Event '{event_request.title}' scheduled for {formatted_date}"
@@ -260,7 +260,7 @@ class CalendarActionExecutor:
                 description=event_request.description
             )
             
-            if result.get('success'):
+            if result and result.get('success'):
                 return ActionResult(
                     action='update_event',
                     success=True,
@@ -295,7 +295,7 @@ class CalendarActionExecutor:
             
             result = self.calendar_client.delete_event(event_request.event_id)
             
-            if result.get('success'):
+            if result and result.get('success'):
                 return ActionResult(
                     action='delete_event',
                     success=True,
@@ -326,7 +326,7 @@ class CalendarActionExecutor:
                 max_results=event_request.max_results
             )
             
-            if result.get('success'):
+            if result and result.get('success'):
                 events = result.get('events', [])
                 response_msg = f"✅ Found {len(events)} upcoming events"
                 return ActionResult(

@@ -136,10 +136,14 @@ class UserManager:
         user = self.get_user_by_phone(phone_number)
         if user:
             token_path = user.get("google_token_path")
-            if token_path and os.path.exists(token_path):
-                return token_path
+            # The client needs the user's email to look up the calendar ID in users.json
+            # and the user's phone number to look up the token path.
+            # Since the client is initialized with the user's email, we return the email.
+            email = user.get("email")
+            if email:
+                return email
             else:
-                logger.warning(f"Google token file not found for {phone_number}: {token_path}")
+                logger.warning(f"User email not found for {phone_number}")
         return None
     
     def is_user_authorized(self, phone_number: str) -> bool:
