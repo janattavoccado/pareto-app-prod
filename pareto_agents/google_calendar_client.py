@@ -1,5 +1,5 @@
 """
-Google Calendar Client - Updated Version
+Google Calendar Client - Corrected Version
 
 Uses config_loader to read credentials from:
 - Base64 environment variables (Heroku)
@@ -20,8 +20,8 @@ import google.auth.exceptions
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-# Import the config loader
-from config_loader import get_google_credentials, get_user_config
+# Import the config loader using RELATIVE IMPORT
+from .config_loader import get_google_credentials, get_user_config
 
 logger = logging.getLogger(__name__)
 
