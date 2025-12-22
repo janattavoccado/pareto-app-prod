@@ -125,11 +125,12 @@ class GoogleCalendarClient:
                 return None
             
             # Get calendar ID for this user
-            if self.user_email in user_config:
-                calendar_id = user_config[self.user_email].get('calendar_id')
-                if calendar_id:
-                    logger.info(f"✅ Calendar ID found: {calendar_id}")
-                    return calendar_id
+            for user_data in user_config.get('users', []):
+                if user_data.get('email') == self.user_email:
+                    calendar_id = user_data.get('calendar_id')
+                    if calendar_id:
+                        logger.info(f"✅ Calendar ID found: {calendar_id}")
+                        return calendar_id
             
             logger.error(f"❌ Calendar ID not found for user {self.user_email}")
             return None
