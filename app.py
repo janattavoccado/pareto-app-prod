@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 # Import config loader for Base64 and file-based configurations
 try:
-    from config_loader import (
+    from pareto_agents.config_loader import (
         get_google_credentials,
         get_user_config,
         get_openai_api_key,
@@ -58,16 +58,16 @@ def verify_configurations():
     logger.info("=" * 80)
     logger.info("VERIFYING APPLICATION CONFIGURATIONS")
     logger.info("=" * 80)
-    
+
     # Verify all configs
     all_configs_ok = verify_all_configs()
-    
+
     if not all_configs_ok:
         logger.warning("⚠️  Some configurations are missing, but app will still start")
         logger.warning("Some features may not work without proper configuration")
     else:
         logger.info("✅ All configurations verified successfully!")
-    
+
     logger.info("=" * 80)
     return all_configs_ok
 
@@ -116,7 +116,7 @@ def health():
         user_config = get_user_config()
         openai_key = get_openai_api_key()
         chatwoot_creds = get_chatwoot_credentials()
-        
+
         # Check if critical configs are available
         configs_ok = (
             google_creds is not None and
@@ -124,7 +124,7 @@ def health():
             openai_key is not None and
             chatwoot_creds.get('api_key') is not None
         )
-        
+
         return {
             "status": "healthy" if configs_ok else "degraded",
             "service": "Valhalla Flask App",
@@ -135,7 +135,7 @@ def health():
                 "chatwoot_credentials": chatwoot_creds.get('api_key') is not None
             }
         }, 200 if configs_ok else 503
-        
+
     except Exception as e:
         logger.error(f"Health check error: {e}")
         return {
@@ -156,7 +156,7 @@ def config_status():
         user_config = get_user_config()
         openai_key = get_openai_api_key()
         chatwoot_creds = get_chatwoot_credentials()
-        
+
         return {
             "environment": "heroku" if os.getenv("DYNO") else "local",
             "configurations": {
@@ -178,7 +178,7 @@ def config_status():
                 }
             }
         }, 200
-        
+
     except Exception as e:
         logger.error(f"Config status error: {e}")
         return {
@@ -218,7 +218,7 @@ if __name__ == "__main__":
     host = os.getenv("SERVER_HOST", "0.0.0.0")
     port = int(os.getenv("PORT", os.getenv("SERVER_PORT", 8000)))
     debug = os.getenv("FLASK_DEBUG", "False").lower() == "true"
-    
+
     logger.info("=" * 80)
     logger.info(f"Starting Valhalla Flask App")
     logger.info(f"Host: {host}")
@@ -226,6 +226,6 @@ if __name__ == "__main__":
     logger.info(f"Debug: {debug}")
     logger.info(f"Environment: {'Heroku' if os.getenv('DYNO') else 'Local'}")
     logger.info("=" * 80)
-    
+
     # Start the Flask app
     app.run(host=host, port=port, debug=debug)
