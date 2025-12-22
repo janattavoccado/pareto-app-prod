@@ -1,81 +1,96 @@
+"""
+Flask Application Entry Point - Final Corrected Version
+
+This file has been updated to:
+1. Use the correct import names from the final config_loader.py.
+2. Handle Heroku's dynamic PORT environment variable.
+3. Include a /config-status endpoint for debugging.
+"""
+
 import os
 import logging
 from flask import Flask, request, jsonify
-from dotenv import load_dotenv
 
-# Corrected Import: Use absolute import from the package
-from pareto_agents.config_loader import get_google_credentials, get_user_config, verify_all_configs
+# Corrected imports from the final config_loader.py
+from pareto_agents.config_loader import (
+    get_google_client_secrets,
+    get_google_user_token,
+    get_user_config,
+    verify_all_configs
+)
 from pareto_agents.chatwoot_webhook import webhook_handler
 
-# Load environment variables from .env file (for local development)
-load_dotenv()
+# --- Configuration ---
+# Determine environment
+IS_HEROKU = 'DYNO' in os.environ
+ENVIRONMENT = 'Heroku Production' if IS_HEROKU else 'Local Development'
 
-# --- Logging Setup ---
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+logger.info(f"Starting Flask app in {ENVIRONMENT} environment.")
 
-# --- Configuration Verification ---
-# This will log the status of all required configurations on startup
-verify_all_configs()
-
-# --- Flask App Initialization ---
+# --- App Initialization ---
 app = Flask(__name__)
+
+# Load configurations on startup
+logger.info("Loading and verifying all configurations...")
+google_client_secrets = get_google_client_secrets()
+google_user_token = get_google_user_token()
+user_config = get_user_config()
+verify_all_configs()
 
 # --- Routes ---
 
-@app.route('/')
-def home():
-    """Simple home route for health check."""
-    return jsonify({"status": "ok", "message": "Valhalla Flask App is running"})
-
-@app.route('/health')
+@app.route('/health', methods=['GET'])
 def health_check():
-    """
-    Detailed health check endpoint.
-    Verifies the status of all critical configurations.
-    """
-    # Re-verify configs to ensure they are still available
-    all_good = verify_all_configs()
-    
-    # Check environment
-    environment = os.getenv('FLASK_ENV', 'development')
-    
-    return jsonify({
-        "status": "healthy" if all_good else "unhealthy",
-        "service": "Valhalla Flask App",
-        "environment": environment,
-        "configs": {
-            "google_credentials": bool(get_google_credentials()),
-            "user_config": bool(get_user_config()),
-            "openai_api_key": bool(os.getenv('OPENAI_API_KEY')),
-            "chatwoot_credentials": bool(os.getenv('CHATWOOT_ACCOUNT_ID') and os.getenv('CHATWOOT_API_KEY'))
-        }
-    }), 200 if all_good else 503
+    """Simple health check endpoint."""
+    return jsonify({"status": "healthy", "environment": ENVIRONMENT}), 200
+
+@app.route('/config-status', methods=['GET'])
+def config_status():
+    """Debugging endpoint to check config loading status."""
+    status = {
+        "environment": ENVIRONMENT,
+        "google_client_secrets": {
+            "loaded": bool(google_client_secrets),
+            "source": "Base64 Env Var (GOOGLE_CREDS_JSON)" if IS_HEROKU and google_client_secrets else "File (configurations/client_secrets.json)" if google_client_secrets else "Missing"
+        },
+        "google_user_token": {
+            "loaded": bool(google_user_token),
+            "source": "Base64 Env Var (GOOGLE_USER_TOKEN_JSON)" if IS_HEROKU and google_user_token else "File (configurations/tokens/jan_avoccado_pareto.json)" if google_user_token else "Missing"
+        },
+        "user_config": {
+            "loaded": bool(user_config),
+            "source": "Base64 Env Var (USER_CONFIG_JSON)" if IS_HEROKU and user_config else "File (configurations/users.json)" if user_config else "Missing"
+        },
+        "all_verified": verify_all_configs()
+    }
+    return jsonify(status), 200
 
 @app.route('/api/chatwoot/webhook', methods=['POST'])
 def chatwoot_webhook():
-    """
-    Handles incoming webhook events from Chatwoot.
-    """
+    """Endpoint for Chatwoot webhooks."""
     try:
         data = request.get_json()
         if not data:
-            return jsonify({"error": "Invalid JSON"}), 400
+            logger.warning("Received empty or non-JSON webhook payload.")
+            return jsonify({"status": "error", "message": "Invalid payload"}), 400
         
+        # The webhook_handler now accepts the data payload
         response = webhook_handler(data)
-        return jsonify(response), 200
-    
+        
+        # Chatwoot expects a 200 OK response quickly, even if processing is async
+        return jsonify({"status": "success", "message": "Webhook received and processing started"}), 200
+        
     except Exception as e:
-        logger.error(f"Error processing webhook: {e}")
-        return jsonify({"error": "Internal Server Error", "details": str(e)}), 500
+        logger.error(f"Error processing webhook: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 # --- Main Execution ---
 
 if __name__ == '__main__':
-    # Heroku uses the PORT environment variable
+    # Use Heroku's dynamic PORT or default to 8000 for local development
     port = int(os.environ.get('PORT', 8000))
-    logger.info(f"Starting Flask app on port {port}")
-    app.run(host='0.0.0.0', port=port)
+    logger.info(f"Starting Flask server on port {port}")
+    app.run(host='0.0.0.0', port=port, debug=not IS_HEROKU)
