@@ -1,4 +1,5 @@
 flask
+gunicorn
 pydantic
 openai-agents
 python-dotenv
