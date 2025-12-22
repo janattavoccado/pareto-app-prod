@@ -23,8 +23,7 @@ chatwoot_bp = Blueprint('chatwoot', __name__, url_prefix='/api/chatwoot')
 # Webhook Handler
 # ============================================================================
 
-@chatwoot_bp.route('/webhook', methods=['POST'])
-def webhook_handler():
+def webhook_handler(payload):
     """
     Main Chatwoot webhook handler
     Receives messages from Chatwoot and processes them through agents
@@ -34,11 +33,12 @@ def webhook_handler():
         from .agents import process_message_sync
 
         # Get payload
-        payload = request.get_json()
+        # NOTE: The payload is now passed as an argument from app.py
+        # payload = request.get_json() # REMOVED
 
         if not payload:
             logger.warning("Empty webhook payload")
-            return jsonify({"error": "Empty payload"}), 400
+            return {"error": "Empty payload"} # Return dict instead of jsonify
 
         logger.debug(f"Webhook payload received")
 
@@ -58,7 +58,7 @@ def webhook_handler():
         # Skip outgoing messages
         if message_type == 'outgoing':
             logger.info(f"Skipping outgoing message {message_id}")
-            return jsonify({"status": "skipped"}), 200
+            return {"status": "skipped"} # Return dict instead of jsonify
 
         # Check for audio message
         attachments = payload.get('attachments', [])
@@ -69,13 +69,13 @@ def webhook_handler():
             logger.warning(
                 f"Missing required fields | Phone: {phone_number}, Content: {bool(content)}, Conv: {conversation_id}"
             )
-            return jsonify({"error": "Missing required fields"}), 400
+            return {"error": "Missing required fields"} # Return dict instead of jsonify
 
         if not all([phone_number, conversation_id]):
             logger.warning(
                 f"Missing required fields | Phone: {phone_number}, Conv: {conversation_id}"
             )
-            return jsonify({"error": "Missing required fields"}), 400
+            return {"error": "Missing required fields"} # Return dict instead of jsonify
 
         logger.info(
             f"Processing message | ID: {message_id} | Conversation: {conversation_id} | "
@@ -97,7 +97,7 @@ def webhook_handler():
                 private=False
             )
 
-            return jsonify({"status": "unauthorized"}), 200
+            return {"status": "unauthorized"} # Return dict instead of jsonify
 
         # Log authorized user
         user_name = f"{user_data.get('first_name')} {user_data.get('last_name')}"
@@ -117,7 +117,7 @@ def webhook_handler():
 
             if not audio_url:
                 logger.error("Audio attachment found but no URL")
-                return jsonify({"error": "Audio URL not found"}), 400
+                return {"error": "Audio URL not found"} # Return dict instead of jsonify
 
             logger.info(f"Transcribing audio message...")
             transcriber = AudioTranscriber()
@@ -131,7 +131,7 @@ def webhook_handler():
                     message_text="Failed to transcribe audio message",
                     private=False
                 )
-                return jsonify({"status": "transcription_failed"}), 200
+                return {"status": "transcription_failed"} # Return dict instead of jsonify
 
             logger.info(f"Audio transcribed successfully: {transcribed_text[:100]}...")
             message_to_process = transcribed_text
@@ -145,7 +145,7 @@ def webhook_handler():
 
         if not agent_result:
             logger.error("Agent processing returned None")
-            return jsonify({"error": "Agent processing failed"}), 500
+            return {"error": "Agent processing failed"} # Return dict instead of jsonify
 
         # Handle mail me command
         if agent_result.get('is_mail_me'):
@@ -154,7 +154,7 @@ def webhook_handler():
             mail_me_request = agent_result.get('mail_me_request')
             if not mail_me_request:
                 logger.error("Mail me request is None")
-                return jsonify({"error": "Mail me request failed"}), 500
+                return {"error": "Mail me request failed"} # Return dict instead of jsonify
 
             try:
                 # Execute mail me action
@@ -185,7 +185,7 @@ def webhook_handler():
                 )
 
                 logger.info(f"Mail me command executed and response sent to Chatwoot")
-                return jsonify({"status": "success", "action": "mail_me"}), 200
+                return {"status": "success", "action": "mail_me"} # Return dict instead of jsonify
 
             except Exception as e:
                 error_msg = f"Error sending email: {str(e)}"
@@ -196,7 +196,7 @@ def webhook_handler():
                     message_text=error_msg,
                     private=False
                 )
-                return jsonify({"status": "error", "action": "mail_me"}), 200
+                return {"status": "error", "action": "mail_me"} # Return dict instead of jsonify
 
         # Handle regular agent response
         logger.info("Processing regular agent response")
@@ -205,7 +205,7 @@ def webhook_handler():
 
         if not agent_response:
             logger.warning("No agent response generated")
-            return jsonify({"error": "No response generated"}), 500
+            return {"error": "No response generated"} # Return dict instead of jsonify
 
         logger.info(f"Agent response ready | Action: {agent_result.get('action_type')} | User: {user_name}")
 
@@ -255,11 +255,67 @@ def webhook_handler():
 
         logger.info(f"Response sent to Chatwoot | Conversation: {conversation_id} | Message ID: {message_id}")
 
-        return jsonify({"status": "success"}), 200
+        return {"status": "success"} # Return dict instead of jsonify
 
     except Exception as e:
         logger.error(f"Error processing webhook: {str(e)}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        return {"error": str(e)} # Return dict instead of jsonify
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+def _detect_action_type(response_text: str) -> str:
+    """
+    Detect if the response contains calendar or email action
+    """
+    response_lower = response_text.lower()
+
+    if any(word in response_lower for word in ['calendar', 'event', 'meeting', 'scheduled', 'appointment']):
+        return 'calendar'
+    elif any(word in response_lower for word in ['email', 'mail', 'sent', 'send']):
+        return 'email'
+
+    return 'none'
+
+
+def _format_action_response(action_result, user_data: dict) -> str:
+    """
+    Format action result response for Chatwoot
+    """
+    if hasattr(action_result, 'response'):
+        return action_result.response
+    elif isinstance(action_result, dict) and 'response' in action_result:
+        return action_result['response']
+
+    return "Action completed successfully"
+
+
+# ============================================================================
+# Health Check Endpoint
+# ============================================================================
+
+@chatwoot_bp.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    try:
+        # Lazy import to avoid circular dependency
+        from .timezone_service import TimezoneService
+
+        timezone_service = TimezoneService()
+        current_time = timezone_service.get_current_time_cet()
+
+        return jsonify({
+            "status": "healthy",
+            "current_time_cet": current_time.isoformat()
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return jsonify({
+            "status": "unhealthy",
+            "error": str(e)
+        }), 500
 
 
 # ============================================================================
