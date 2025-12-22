@@ -6,7 +6,7 @@ Reads configurations from:
 2. JSON files (Local Windows development)
 
 Supports:
-- Google credentials (client_secrets.json)
+- Google credentials (client_secrets.json and user_token.json)
 - User configuration (users.json)
 - OpenAI API key
 - Chatwoot credentials
@@ -108,21 +108,63 @@ class ConfigLoader:
 
     @staticmethod
     def get_google_client_secrets() -> Optional[Dict]:
-        """Loads Google client secrets (client_secrets.json)"""
+        """
+        Get Google client secrets (client_secrets.json) from Base64 env var or file.
+        
+        Priority:
+        1. GOOGLE_CREDS_JSON environment variable (Base64, Heroku)
+        2. configurations/client_secrets.json file (Local)
+        
+        Returns:
+            Google client secrets dictionary or None
+        """
+        
+        # Try Base64 environment variable first (Heroku)
         logger.info("Attempting to load Google Client Secrets...")
-        return ConfigLoader._load_base64_json_or_file(
-            env_var_name='GOOGLE_CLIENT_SECRETS_JSON',
+        
+        creds = ConfigLoader._load_base64_json_or_file(
+            env_var_name='GOOGLE_CREDS_JSON',
             local_path='configurations/client_secrets.json'
         )
+        
+        if creds:
+            logger.info("✅ Google Client Secrets found.")
+            return creds
+        
+        logger.error("❌ Google Client Secrets not found!")
+        logger.error("   Set GOOGLE_CREDS_JSON env var (Base64, Heroku)")
+        logger.error("   OR create configurations/client_secrets.json (Local)")
+        return None
 
     @staticmethod
     def get_google_user_token() -> Optional[Dict]:
-        """Loads Google user token (jan_avoccado_pareto.json)"""
+        """
+        Get Google user token (jan_avoccado_pareto.json) from Base64 env var or file.
+        
+        Priority:
+        1. GOOGLE_USER_TOKEN_JSON environment variable (Base64, Heroku)
+        2. configurations/tokens/jan_avoccado_pareto.json file (Local)
+        
+        Returns:
+            Google user token dictionary or None
+        """
+        
+        # Try Base64 environment variable first (Heroku)
         logger.info("Attempting to load Google User Token...")
-        return ConfigLoader._load_base64_json_or_file(
+        
+        token = ConfigLoader._load_base64_json_or_file(
             env_var_name='GOOGLE_USER_TOKEN_JSON',
             local_path='configurations/tokens/jan_avoccado_pareto.json'
         )
+        
+        if token:
+            logger.info("✅ Google User Token found.")
+            return token
+        
+        logger.error("❌ Google User Token not found!")
+        logger.error("   Set GOOGLE_USER_TOKEN_JSON env var (Base64, Heroku)")
+        logger.error("   OR create configurations/tokens/jan_avoccado_pareto.json (Local)")
+        return None
     
     @staticmethod
     def get_user_config() -> Optional[Dict]:
@@ -251,10 +293,13 @@ class ConfigLoader:
 
 
 # Convenience functions for easy import
-def get_google_credentials() -> Optional[Dict]:
-    """Get Google credentials."""
-    return ConfigLoader.get_google_credentials()
+def get_google_client_secrets() -> Optional[Dict]:
+    """Get Google client secrets."""
+    return ConfigLoader.get_google_client_secrets()
 
+def get_google_user_token() -> Optional[Dict]:
+    """Get Google user token."""
+    return ConfigLoader.get_google_user_token()
 
 def get_user_config() -> Optional[Dict]:
     """Get user configuration."""
