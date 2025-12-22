@@ -1,329 +1,336 @@
 """
-Google Calendar Client - Corrected Version
-
-Uses config_loader to read credentials from:
-- Base64 environment variables (Heroku)
-- JSON files (Local Windows development)
+Google Calendar Client for managing calendar events
+Uses timezone_service for timezone handling (NO ZoneInfo)
+Supports Base64 environment variables for Heroku and local files for development
 """
 
+import logging
 import os
 import json
-import logging
-from pathlib import Path
-from typing import Optional, Dict, List
+import base64
+from datetime import datetime, timedelta
+from typing import Optional, Dict, Any, List
 from google.oauth2.service_account import Credentials
 from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials as UserCredentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.exceptions import RefreshError
-import google.auth.exceptions
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-
-# Import the config loader using RELATIVE IMPORT
-from .config_loader import get_google_client_secrets, get_google_user_token, get_user_config
+from pareto_agents.timezone_service import TimezoneService
 
 logger = logging.getLogger(__name__)
-
-# Google Calendar API scopes
-SCOPES = ['https://www.googleapis.com/auth/calendar']
 
 
 class GoogleCalendarClient:
     """
-    Google Calendar API client with support for:
-    - Base64 environment variables (Heroku)
-    - JSON files (Local development)
+    Google Calendar API client for creating and managing events
+    Uses TimezoneService for timezone handling
+    Supports both Base64 env vars (Heroku) and file paths (Local)
     """
     
-    def __init__(self, user_email: str = 'jan_avoccado_pareto'):
+    TIMEZONE_CET = "Europe/Zagreb"
+    SCOPES = ["https://www.googleapis.com/auth/calendar"]
+    
+    def __init__(self, token_path: str):
         """
-        Initialize Google Calendar client.
+        Initialize Google Calendar client
         
         Args:
-            user_email: User identifier for token storage
+            token_path (str): Path to OAuth2 token file (or env var name for Heroku)
         """
-        self.user_email = user_email
-        self.token_path = f'configurations/tokens/{user_email}.json'
+        self.token_path = token_path
         self.service = None
-        self.credentials = None
-        
-        logger.info(f"Initializing Google Calendar client for {user_email}")
-        
-        # Load credentials
-        self._load_credentials()
-        
-        if self.credentials:
-            self._build_service()
+        self._initialize_service()
     
-    def _load_credentials(self) -> bool:
+    def _load_token_data(self) -> Dict[str, Any]:
         """
-        Load Google credentials from config loader.
+        Load token data from either Base64 env var or file
         
         Returns:
-            True if credentials loaded, False otherwise
+            dict: Token data
         """
-        try:
-            # 1. Get the user's token (jan_avoccado_pareto.json content)
-            token_dict = get_google_user_token()
-            client_secrets = get_google_client_secrets()
-            
-            if not token_dict or not client_secrets:
-                logger.error("❌ Could not load Google user token or client secrets")
-                return False
-            
-            # 2. Load as UserCredentials (which is what the token.json contains)
-            # The token file is the result of the OAuth flow, so it's a UserCredentials object.
-            logger.info("✅ Using OAuth User Token credentials")
-            
-            # Merge client secrets into token dict for refresh to work
-            creds_dict = {**token_dict, **client_secrets.get('installed', {})}
-            
-            self.credentials = UserCredentials.from_authorized_user_info(
-                creds_dict,
-                scopes=SCOPES
-            )
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ Error loading credentials: {e}")
-            return False
-    
-    def _build_service(self) -> bool:
-        """
-        Build Google Calendar service.
+        # Try to load from Base64 environment variable first (Heroku)
+        if self.token_path == 'GOOGLE_USER_TOKEN_JSON':
+            env_value = os.getenv('GOOGLE_USER_TOKEN_JSON')
+            if env_value:
+                try:
+                    decoded = base64.b64decode(env_value).decode('utf-8')
+                    token_data = json.loads(decoded)
+                    logger.info("✅ Loaded Google User Token from Base64 environment variable")
+                    return token_data
+                except Exception as e:
+                    logger.error(f"❌ Error decoding GOOGLE_USER_TOKEN_JSON: {e}")
         
-        Returns:
-            True if service built, False otherwise
-        """
+        # Fall back to file path (Local development)
         try:
-            if not self.credentials:
-                logger.error("❌ No credentials available to build service")
-                return False
-            
-            self.service = build('calendar', 'v3', credentials=self.credentials)
-            logger.info("✅ Google Calendar service built successfully")
-            return True
-            
+            with open(self.token_path, 'r') as f:
+                token_data = json.load(f)
+            logger.info(f"✅ Loaded Google User Token from file: {self.token_path}")
+            return token_data
         except Exception as e:
-            logger.error(f"❌ Error building Calendar service: {e}")
-            return False
+            logger.error(f"❌ Error loading token from file {self.token_path}: {e}")
+            raise
     
-    def get_calendar_id(self) -> Optional[str]:
-        """
-        Get calendar ID from user config.
+    def _initialize_service(self) -> None:
+        """Initialize Google Calendar service with OAuth2 token"""
+        try:
+            from google.oauth2.credentials import Credentials
+            from google.auth.transport.requests import Request
+            
+            # Load token data
+            token_data = self._load_token_data()
+            
+            creds = Credentials.from_authorized_user_info(token_data, self.SCOPES)
+            
+            # Refresh token if expired
+            if creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+                logger.info(f"Token refreshed for {self.token_path}")
+            
+            # Build service
+            self.service = build('calendar', 'v3', credentials=creds)
+            logger.info(f"Google Calendar service initialized")
         
-        Returns:
-            Calendar ID or None
-        """
-        try:
-            user_config = get_user_config()
-            
-            if not user_config:
-                logger.error("❌ Could not load user configuration")
-                return None
-            
-            # Get calendar ID for this user
-            for user_data in user_config.get('users', []):
-                if user_data.get('email') == self.user_email:
-                    calendar_id = user_data.get('calendar_id')
-                    if calendar_id:
-                        logger.info(f"✅ Calendar ID found: {calendar_id}")
-                        return calendar_id
-            
-            logger.error(f"❌ Calendar ID not found for user {self.user_email}")
-            return None
-            
         except Exception as e:
-            logger.error(f"❌ Error getting calendar ID: {e}")
-            return None
+            logger.error(f"Error initializing Google Calendar service: {str(e)}", exc_info=True)
+            raise
     
-    def create_event(self, event_data: Dict) -> Optional[Dict]:
+    def create_event(
+        self,
+        title: str,
+        start_datetime: datetime,
+        end_datetime: Optional[datetime] = None,
+        description: str = "",
+        attendees: Optional[List[str]] = None,
+        location: str = ""
+    ) -> Dict[str, Any]:
         """
-        Create a calendar event.
+        Create a calendar event
         
         Args:
-            event_data: Event details (summary, start, end, description, etc.)
+            title (str): Event title
+            start_datetime (datetime): Event start time (naive datetime in CET)
+            end_datetime (datetime): Event end time (naive datetime in CET)
+            description (str): Event description
+            attendees (List[str]): List of attendee emails
+            location (str): Event location
             
         Returns:
-            Created event or None
+            dict: Event creation result with success status and event details
         """
         try:
-            if not self.service:
-                logger.error("❌ Calendar service not initialized")
-                return None
+            # Ensure we have a service
+            if self.service is None:
+                self._initialize_service()
             
-            calendar_id = self.get_calendar_id()
-            if not calendar_id:
-                logger.error("❌ Could not get calendar ID")
-                return None
+            # If no end time, set to 1 hour after start
+            if end_datetime is None:
+                end_datetime = start_datetime + timedelta(hours=1)
             
-            logger.info(f"Creating event: {event_data.get('summary')}")
+            # Convert naive datetimes to ISO format strings
+            # Google Calendar API expects ISO 8601 format with timezone
+            start_str = start_datetime.isoformat()
+            end_str = end_datetime.isoformat()
             
-            event = self.service.events().insert(
-                calendarId=calendar_id,
-                body=event_data
+            logger.debug(f"Creating event: {title}")
+            logger.debug(f"  Start: {start_str}")
+            logger.debug(f"  End: {end_str}")
+            logger.debug(f"  Timezone: {self.TIMEZONE_CET}")
+            
+            # Build event object
+            event = {
+                'summary': title,
+                'description': description,
+                'start': {
+                    'dateTime': start_str,
+                    'timeZone': self.TIMEZONE_CET,
+                },
+                'end': {
+                    'dateTime': end_str,
+                    'timeZone': self.TIMEZONE_CET,
+                },
+            }
+            
+            # Add location if provided
+            if location:
+                event['location'] = location
+            
+            # Add attendees if provided
+            if attendees:
+                event['attendees'] = [{'email': email} for email in attendees]
+            
+            # Create event
+            created_event = self.service.events().insert(
+                calendarId='primary',
+                body=event,
+                sendNotifications=True
             ).execute()
             
-            logger.info(f"✅ Event created: {event.get('id')}")
-            return event
+            logger.info(f"Event created successfully: {created_event['id']}")
+            logger.info(f"  Title: {created_event['summary']}")
+            logger.info(f"  Start: {created_event['start'].get('dateTime', created_event['start'].get('date'))}")
             
-        except HttpError as e:
-            logger.error(f"❌ Google API error: {e}")
-            return None
+            return {
+                'success': True,
+                'event_id': created_event['id'],
+                'event': created_event,
+                'title': created_event['summary'],
+                'start': created_event['start'].get('dateTime', created_event['start'].get('date')),
+            }
+        
         except Exception as e:
-            logger.error(f"❌ Error creating event: {e}")
-            return None
+            logger.error(f"Error creating event: {str(e)}", exc_info=True)
+            return {
+                'success': False,
+                'error': f"Error creating event: {str(e)}",
+            }
     
-    def update_event(self, event_id: str, event_data: Dict) -> Optional[Dict]:
+    def get_events(
+        self,
+        time_min: Optional[datetime] = None,
+        time_max: Optional[datetime] = None,
+        max_results: int = 10
+    ) -> Dict[str, Any]:
         """
-        Update a calendar event.
+        Get calendar events
         
         Args:
-            event_id: ID of event to update
-            event_data: Updated event details
+            time_min (datetime): Minimum time (inclusive)
+            time_max (datetime): Maximum time (exclusive)
+            max_results (int): Maximum number of results
             
         Returns:
-            Updated event or None
+            dict: List of events
         """
         try:
-            if not self.service:
-                logger.error("❌ Calendar service not initialized")
-                return None
+            if self.service is None:
+                self._initialize_service()
             
-            calendar_id = self.get_calendar_id()
-            if not calendar_id:
-                logger.error("❌ Could not get calendar ID")
-                return None
+            kwargs = {
+                'calendarId': 'primary',
+                'maxResults': max_results,
+                'singleEvents': True,
+                'orderBy': 'startTime',
+            }
             
-            logger.info(f"Updating event: {event_id}")
+            if time_min:
+                kwargs['timeMin'] = time_min.isoformat() + 'Z'
             
-            event = self.service.events().update(
-                calendarId=calendar_id,
-                eventId=event_id,
-                body=event_data
-            ).execute()
+            if time_max:
+                kwargs['timeMax'] = time_max.isoformat() + 'Z'
             
-            logger.info(f"✅ Event updated: {event_id}")
-            return event
+            events = self.service.events().list(**kwargs).execute()
             
-        except HttpError as e:
-            logger.error(f"❌ Google API error: {e}")
-            return None
+            return {
+                'success': True,
+                'events': events.get('items', []),
+            }
+        
         except Exception as e:
-            logger.error(f"❌ Error updating event: {e}")
-            return None
+            logger.error(f"Error getting events: {str(e)}", exc_info=True)
+            return {
+                'success': False,
+                'error': f"Error getting events: {str(e)}",
+            }
     
-    def delete_event(self, event_id: str) -> bool:
+    def delete_event(self, event_id: str) -> Dict[str, Any]:
         """
-        Delete a calendar event.
+        Delete a calendar event
         
         Args:
-            event_id: ID of event to delete
+            event_id (str): Event ID
             
         Returns:
-            True if deleted, False otherwise
+            dict: Deletion result
         """
         try:
-            if not self.service:
-                logger.error("❌ Calendar service not initialized")
-                return False
-            
-            calendar_id = self.get_calendar_id()
-            if not calendar_id:
-                logger.error("❌ Could not get calendar ID")
-                return False
-            
-            logger.info(f"Deleting event: {event_id}")
+            if self.service is None:
+                self._initialize_service()
             
             self.service.events().delete(
-                calendarId=calendar_id,
+                calendarId='primary',
                 eventId=event_id
             ).execute()
             
-            logger.info(f"✅ Event deleted: {event_id}")
-            return True
+            logger.info(f"Event deleted: {event_id}")
             
-        except HttpError as e:
-            logger.error(f"❌ Google API error: {e}")
-            return False
+            return {
+                'success': True,
+                'event_id': event_id,
+            }
+        
         except Exception as e:
-            logger.error(f"❌ Error deleting event: {e}")
-            return False
+            logger.error(f"Error deleting event: {str(e)}", exc_info=True)
+            return {
+                'success': False,
+                'error': f"Error deleting event: {str(e)}",
+            }
     
-    def list_events(self, max_results: int = 10) -> Optional[List[Dict]]:
+    def update_event(
+        self,
+        event_id: str,
+        title: Optional[str] = None,
+        start_datetime: Optional[datetime] = None,
+        end_datetime: Optional[datetime] = None,
+        description: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
-        List upcoming calendar events.
+        Update a calendar event
         
         Args:
-            max_results: Maximum number of events to return
+            event_id (str): Event ID
+            title (str): New event title
+            start_datetime (datetime): New start time
+            end_datetime (datetime): New end time
+            description (str): New description
             
         Returns:
-            List of events or None
+            dict: Update result
         """
         try:
-            if not self.service:
-                logger.error("❌ Calendar service not initialized")
-                return None
+            if self.service is None:
+                self._initialize_service()
             
-            calendar_id = self.get_calendar_id()
-            if not calendar_id:
-                logger.error("❌ Could not get calendar ID")
-                return None
-            
-            logger.info(f"Listing {max_results} upcoming events")
-            
-            events_result = self.service.events().list(
-                calendarId=calendar_id,
-                maxResults=max_results,
-                singleEvents=True,
-                orderBy='startTime'
+            # Get existing event
+            event = self.service.events().get(
+                calendarId='primary',
+                eventId=event_id
             ).execute()
             
-            events = events_result.get('items', [])
-            logger.info(f"✅ Found {len(events)} events")
-            return events
+            # Update fields
+            if title:
+                event['summary'] = title
             
-        except HttpError as e:
-            logger.error(f"❌ Google API error: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"❌ Error listing events: {e}")
-            return None
-
-
-# Convenience function
-def get_calendar_client(user_email: str = 'jan_avoccado_pareto') -> Optional[GoogleCalendarClient]:
-    """
-    Get initialized Google Calendar client.
-    
-    Args:
-        user_email: User identifier
+            if description:
+                event['description'] = description
+            
+            if start_datetime:
+                event['start'] = {
+                    'dateTime': start_datetime.isoformat(),
+                    'timeZone': self.TIMEZONE_CET,
+                }
+            
+            if end_datetime:
+                event['end'] = {
+                    'dateTime': end_datetime.isoformat(),
+                    'timeZone': self.TIMEZONE_CET,
+                }
+            
+            # Update event
+            updated_event = self.service.events().update(
+                calendarId='primary',
+                eventId=event_id,
+                body=event
+            ).execute()
+            
+            logger.info(f"Event updated: {event_id}")
+            
+            return {
+                'success': True,
+                'event_id': updated_event['id'],
+                'event': updated_event,
+            }
         
-    Returns:
-        GoogleCalendarClient instance or None
-    """
-    try:
-        client = GoogleCalendarClient(user_email)
-        if client.service:
-            return client
-        return None
-    except Exception as e:
-        logger.error(f"❌ Error creating calendar client: {e}")
-        return None
-
-
-if __name__ == '__main__':
-    # Test script
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    
-    client = get_calendar_client()
-    if client:
-        events = client.list_events(5)
-        if events:
-            for event in events:
-                print(f"- {event['summary']} ({event['start']})")
+        except Exception as e:
+            logger.error(f"Error updating event: {str(e)}", exc_info=True)
+            return {
+                'success': False,
+                'error': f"Error updating event: {str(e)}",
+            }

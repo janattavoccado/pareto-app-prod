@@ -11,9 +11,6 @@ import os
 from typing import Optional, Dict, Any
 from pathlib import Path
 
-# Assuming config_loader is available for loading users.json content
-from .config_loader import get_user_config
-
 logger = logging.getLogger(__name__)
 
 
@@ -22,33 +19,48 @@ class UserManager:
     Manages user authentication and lookup from configuration file
     """
     
-    def __init__(self):
+    def __init__(self, config_path: str = "configurations/users.json"):
         """
-        Initialize UserManager by loading users data via config_loader.
+        Initialize UserManager with configuration file path
+        
+        Args:
+            config_path (str): Path to users.json configuration file
         """
+        self.config_path = config_path
         self.users_data = None
         self._load_users()
     
     def _load_users(self) -> None:
         """
-        Load users from configuration file using config_loader.
+        Load users from configuration file
+        
+        Raises:
+            FileNotFoundError: If configuration file doesn't exist
+            json.JSONDecodeError: If configuration file is invalid JSON
         """
         try:
-            # Use config_loader to get users data (from Base64 or file)
-            config = get_user_config()
+            if not os.path.exists(self.config_path):
+                raise FileNotFoundError(
+                    f"Configuration file not found: {self.config_path}\n"
+                    f"Please create {self.config_path} with user configurations."
+                )
             
-            if not config:
-                logger.error("Users configuration not loaded. Check USER_CONFIG_JSON or configurations/users.json")
-                self.users_data = {"users": []}
-                return
+            with open(self.config_path, 'r') as f:
+                self.users_data = json.load(f)
             
-            self.users_data = config
-            
-            logger.info(f"Loaded {len(self.users_data.get('users', []))} users from configurations/users.json")
+            logger.info(f"Loaded {len(self.users_data.get('users', []))} users from {self.config_path}")
+        
+        except FileNotFoundError as e:
+            logger.error(str(e))
+            raise
+        
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in {self.config_path}: {str(e)}")
+            raise
         
         except Exception as e:
             logger.error(f"Error loading users configuration: {str(e)}")
-            self.users_data = {"users": []}
+            raise
     
     def get_user_by_phone(self, phone_number: str) -> Optional[Dict[str, Any]]:
         """
@@ -82,6 +94,12 @@ class UserManager:
     def get_user_full_name(self, phone_number: str) -> str:
         """
         Get user's full name by phone number
+        
+        Args:
+            phone_number (str): Phone number to search for
+            
+        Returns:
+            str: Full name if user found and enabled, empty string otherwise
         """
         user = self.get_user_by_phone(phone_number)
         if user:
@@ -94,35 +112,45 @@ class UserManager:
         """
         Get user's email by phone number
         
+        Args:
+            phone_number (str): Phone number to search for
+            
         Returns:
             str: Email address if user found and enabled, None otherwise
         """
         user = self.get_user_by_phone(phone_number)
         if user:
-            # This is the key the calendar client needs to look up calendar_id in users.json
             return user.get("email")
         return None
     
     def get_google_token_path(self, phone_number: str) -> Optional[str]:
         """
-        Get path to user's Google API token file (now returns email for client init)
+        Get path to user's Google API token file
         
-        The client is initialized with the user's email, which is then used as the key
-        to look up the calendar ID in users.json.
+        Args:
+            phone_number (str): Phone number to search for
+            
+        Returns:
+            str: Path to token file if user found and enabled, None otherwise
         """
         user = self.get_user_by_phone(phone_number)
         if user:
-            # The client needs the user's email to look up the calendar ID in users.json
-            email = user.get("email")
-            if email:
-                return email
+            token_path = user.get("google_token_path")
+            if token_path and os.path.exists(token_path):
+                return token_path
             else:
-                logger.warning(f"User email not found for {phone_number}")
+                logger.warning(f"Google token file not found for {phone_number}: {token_path}")
         return None
     
     def is_user_authorized(self, phone_number: str) -> bool:
         """
         Check if user is authorized (exists and enabled)
+        
+        Args:
+            phone_number (str): Phone number to check
+            
+        Returns:
+            bool: True if user is authorized, False otherwise
         """
         user = self.get_user_by_phone(phone_number)
         return user is not None
@@ -130,6 +158,7 @@ class UserManager:
     def reload_users(self) -> None:
         """
         Reload users from configuration file
+        Useful for refreshing configuration without restarting the app
         """
         logger.info("Reloading users configuration...")
         self._load_users()
@@ -139,11 +168,17 @@ class UserManager:
 _user_manager = None
 
 
-def get_user_manager() -> UserManager:
+def get_user_manager(config_path: str = "configurations/users.json") -> UserManager:
     """
     Get or create the UserManager instance
+    
+    Args:
+        config_path (str): Path to users.json configuration file
+        
+    Returns:
+        UserManager: The user manager instance
     """
     global _user_manager
     if _user_manager is None:
-        _user_manager = UserManager()
+        _user_manager = UserManager(config_path)
     return _user_manager
