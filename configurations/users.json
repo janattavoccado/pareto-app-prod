@@ -9,12 +9,12 @@
       "google_token_path": "configurations/tokens/jan_avoccado_pareto.json"
     },
     {
-      "phone_number": "+46701234567",
-      "first_name": "Jane",
-      "last_name": "Smith",
-      "email": "jane.smith@example.com",
-      "enabled": false,
-      "google_token_path": "configurations/tokens/jane_smith_token.json"
+      "phone_number": "+38591373 7737",
+      "first_name": "Iva",
+      "last_name": "Maric Bele Nylen",
+      "email": "iva.avoccado.pareto@gmail.com",
+      "enabled": true,
+      "google_token_path": "configurations/tokens/iva_avoccado_pareto.json"
     },
     {
       "phone_number": "+46702345678",
