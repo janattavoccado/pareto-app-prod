@@ -216,6 +216,15 @@
             background-color: #c0392b;
         }
 
+        .btn-info {
+            background-color: #3498db;
+            color: white;
+        }
+
+        .btn-info:hover {
+            background-color: #2980b9;
+        }
+
         .btn-small {
             padding: 6px 12px;
             font-size: 12px;
@@ -811,6 +820,40 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeUserModal()">Cancel</button>
                 <button type="submit" form="userForm" class="btn btn-primary">Save User</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Token Management Modal -->
+    <div id="tokenModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Manage Google Token</h2>
+                <button class="modal-close" onclick="closeTokenModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="tokenInfo" style="margin-bottom: 20px; padding: 15px; background-color: rgba(52, 152, 219, 0.1); border-radius: 4px;">
+                    <p><strong>User:</strong> <span id="tokenUserName"></span></p>
+                    <p><strong>Status:</strong> <span id="tokenStatus"></span></p>
+                </div>
+                <div class="form-group">
+                    <label>Upload Google Token (JSON file)</label>
+                    <input type="file" id="tokenFile" accept=".json" required>
+                    <small style="color: #7f8c8d;">Select your Google OAuth token JSON file</small>
+                </div>
+                <div id="tokenUploadError" class="alert alert-error hidden" style="margin: 15px 0;">
+                    <i class="material-icons">error</i>
+                    <span id="tokenUploadErrorMsg"></span>
+                </div>
+                <div id="tokenUploadSuccess" class="alert alert-success hidden" style="margin: 15px 0;">
+                    <i class="material-icons">check_circle</i>
+                    <span id="tokenUploadSuccessMsg"></span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeTokenModal()">Cancel</button>
+                <button class="btn btn-danger" id="deleteTokenBtn" onclick="deleteUserToken()" style="margin-right: auto;">Delete Token</button>
+                <button class="btn btn-primary" id="uploadTokenBtn" onclick="uploadUserToken()">Upload Token</button>
             </div>
         </div>
     </div>

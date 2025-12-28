@@ -7,8 +7,10 @@ File location: pareto_agents/mail_me_handler.py
 
 import logging
 import re
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Any
 from pydantic import BaseModel, Field, EmailStr
+from .google_email_client import GoogleEmailClient
+from .config_loader_v2 import get_google_user_token_by_phone
 
 logger = logging.getLogger(__name__)
 
@@ -175,8 +177,7 @@ class MailMeHandler:
     @staticmethod
     def create_mail_me_request(
         content: str,
-        user_email: str,
-        user_name: str
+        user_data: Dict[str, Any]
     ) -> MailMeRequest:
         """
         Create a structured MailMeRequest from message content
@@ -201,15 +202,15 @@ class MailMeHandler:
             
             # Create request
             request = MailMeRequest(
-                recipient_email=user_email,
-                sender_email=user_email,
+                recipient_email=user_data['email'],
+                sender_email=user_data['email'],
                 subject=subject,
                 body=body,
-                user_name=user_name
+                user_name=user_data['full_name']
             )
             
             logger.info(
-                f"Created mail me request for {user_name} | "
+                f"Created mail me request for {user_data['full_name']} | "
                 f"Subject: {subject} | Body length: {len(body)}"
             )
             
@@ -219,6 +220,22 @@ class MailMeHandler:
             logger.error(f"Error creating mail me request: {str(e)}", exc_info=True)
             raise
     
+    @staticmethod
+    def send_email(request: MailMeRequest, token: Dict[str, Any]) -> bool:
+        """
+        Send email using GoogleEmailClient
+        """
+        try:
+            email_client = GoogleEmailClient(token)
+            return email_client.send_email(
+                to=request.recipient_email,
+                subject=request.subject,
+                body=request.body
+            )
+        except Exception as e:
+            logger.error(f"Error sending email: {e}", exc_info=True)
+            return False
+
     @staticmethod
     def format_mail_me_response(user_name: str, subject: str, recipient: str) -> str:
         """

@@ -301,6 +301,9 @@ function displayUsers(users) {
                 <button class="btn btn-primary btn-small" onclick="openEditUserModal(${user.id})">
                     <i class="material-icons" style="font-size: 16px;">edit</i>
                 </button>
+                <button class="btn btn-info btn-small" onclick="openTokenModal(${user.id}, '${user.full_name}')">
+                    <i class="material-icons" style="font-size: 16px;">vpn_key</i>
+                </button>
                 <button class="btn btn-danger btn-small" onclick="openDeleteUserModal(${user.id}, '${user.full_name}')">
                     <i class="material-icons" style="font-size: 16px;">delete</i>
                 </button>
@@ -658,6 +661,144 @@ function showAlert(message, type = 'info') {
     setTimeout(() => {
         alert.remove();
     }, 5000);
+}
+
+// ============================================================================
+// Token Management
+// ============================================================================
+
+let currentTokenUserId = null;
+let currentTokenUserName = null;
+
+function openTokenModal(userId, userName) {
+    currentTokenUserId = userId;
+    currentTokenUserName = userName;
+    
+    document.getElementById('tokenUserName').textContent = userName;
+    document.getElementById('tokenFile').value = '';
+    document.getElementById('tokenUploadError').classList.add('hidden');
+    document.getElementById('tokenUploadSuccess').classList.add('hidden');
+    
+    // Load token info
+    loadTokenInfo(userId);
+    
+    document.getElementById('tokenModal').classList.add('active');
+}
+
+function closeTokenModal() {
+    document.getElementById('tokenModal').classList.remove('active');
+    currentTokenUserId = null;
+    currentTokenUserName = null;
+}
+
+async function loadTokenInfo(userId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/tokens/users/${userId}/get`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            if (data.has_token) {
+                const info = data.token_info;
+                document.getElementById('tokenStatus').innerHTML = `
+                    <span class="badge badge-success">Token Configured</span><br>
+                    <small>Type: ${info.type || 'N/A'}</small>
+                `;
+                document.getElementById('deleteTokenBtn').style.display = 'inline-block';
+            } else {
+                document.getElementById('tokenStatus').innerHTML = '<span class="badge badge-danger">No Token</span>';
+                document.getElementById('deleteTokenBtn').style.display = 'none';
+            }
+        }
+    } catch (error) {
+        console.error('Error loading token info:', error);
+        document.getElementById('tokenStatus').innerHTML = '<span class="badge badge-danger">Error</span>';
+    }
+}
+
+async function uploadUserToken() {
+    const fileInput = document.getElementById('tokenFile');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        showAlert('Please select a token file', 'error');
+        return;
+    }
+    
+    try {
+        // Read file as text
+        const fileContent = await file.text();
+        
+        // Parse JSON to validate
+        let tokenJson;
+        try {
+            tokenJson = JSON.parse(fileContent);
+        } catch (e) {
+            showAlert('Invalid JSON file', 'error');
+            return;
+        }
+        
+        // Upload token
+        const response = await fetch(`${API_BASE_URL}/tokens/users/${currentTokenUserId}/set`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionToken}`
+            },
+            body: JSON.stringify({ token_json: tokenJson })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            document.getElementById('tokenUploadSuccess').classList.remove('hidden');
+            document.getElementById('tokenUploadSuccessMsg').textContent = data.message || 'Token uploaded successfully';
+            document.getElementById('tokenUploadError').classList.add('hidden');
+            
+            showAlert('Token uploaded successfully', 'success');
+            
+            // Reload token info
+            setTimeout(() => {
+                loadTokenInfo(currentTokenUserId);
+            }, 1000);
+        } else {
+            document.getElementById('tokenUploadError').classList.remove('hidden');
+            document.getElementById('tokenUploadErrorMsg').textContent = data.message || 'Failed to upload token';
+            showAlert(data.message || 'Failed to upload token', 'error');
+        }
+    } catch (error) {
+        console.error('Error uploading token:', error);
+        document.getElementById('tokenUploadError').classList.remove('hidden');
+        document.getElementById('tokenUploadErrorMsg').textContent = 'An error occurred while uploading';
+        showAlert('An error occurred while uploading token', 'error');
+    }
+}
+
+async function deleteUserToken() {
+    if (!confirm('Are you sure you want to delete this token?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/tokens/users/${currentTokenUserId}/delete`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert('Token deleted successfully', 'success');
+            loadTokenInfo(currentTokenUserId);
+        } else {
+            showAlert(data.message || 'Failed to delete token', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting token:', error);
+        showAlert('An error occurred while deleting token', 'error');
+    }
 }
 
 // ============================================================================

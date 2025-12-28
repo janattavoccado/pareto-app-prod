@@ -231,7 +231,7 @@ def get_user(user_id):
                 'full_name': user.full_name,
                 'email': user.email,
                 'enabled': user.is_enabled,
-                'google_token_path': user.google_token_path,
+                'has_google_token': user.has_google_token(),
                 'created_at': user.created_at.isoformat() if user.created_at else None,
                 'updated_at': user.updated_at.isoformat() if user.updated_at else None
             }

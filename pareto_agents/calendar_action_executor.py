@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from openai import OpenAI
 
 from .google_calendar_client import GoogleCalendarClient
-from .user_manager import get_user_manager
+from .config_loader_v2 import get_google_user_token_by_phone
 from .timezone_service import TimezoneService
 
 logger = logging.getLogger(__name__)
@@ -100,7 +100,7 @@ class CalendarActionExecutor:
             user_phone (str): User phone number
         """
         self.user_phone = user_phone
-        self.user_manager = get_user_manager()
+        
         self.timezone_service = TimezoneService()
         self.calendar_client = None
         self.llm_client = OpenAI()  # Uses OPENAI_API_KEY env var
@@ -110,12 +110,12 @@ class CalendarActionExecutor:
         """Initialize Google Calendar client for the user"""
         try:
             # Get token path using correct UserManager API
-            token_path = self.user_manager.get_google_token_path(self.user_phone)
-            if not token_path:
-                logger.error(f"No token path for user {self.user_phone}")
+            token = get_google_user_token_by_phone(self.user_phone)
+            if not token:
+                logger.error(f"No Google token found in database for user {self.user_phone}")
                 return
             
-            self.calendar_client = GoogleCalendarClient(token_path)
+            self.calendar_client = GoogleCalendarClient(token)
             logger.info(f"Calendar client initialized for {self.user_phone}")
         
         except Exception as e:

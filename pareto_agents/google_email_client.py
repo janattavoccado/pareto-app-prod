@@ -37,7 +37,7 @@ class GoogleEmailClient:
         'https://www.googleapis.com/auth/gmail.modify'
     ]
     
-    def __init__(self, token_path: str, client_secrets_path: str = "configurations/client_secrets.json"):
+    def __init__(self, token_data: Dict[str, Any], client_secrets_path: str = "configurations/client_secrets.json"):
         """
         Initialize Google Email Client with user's token
         
@@ -45,43 +45,13 @@ class GoogleEmailClient:
             token_path (str): Path to user's Google OAuth token file (or env var name for Heroku)
             client_secrets_path (str): Path to client_secrets.json from Google Console
         """
-        self.token_path = token_path
+        self.token_data = token_data
         self.client_secrets_path = client_secrets_path
         self.credentials = None
         self.service = None
         self._authenticate()
     
-    def _load_token_data(self) -> Dict[str, Any]:
-        """
-        Load token data from either Base64 env var or file
-        
-        Returns:
-            dict: Token data
-        """
-        # Try to load from Base64 environment variable first (Heroku)
-        if self.token_path == 'GOOGLE_USER_TOKEN_JSON':
-            env_value = os.getenv('GOOGLE_USER_TOKEN_JSON')
-            if env_value:
-                try:
-                    decoded = base64.b64decode(env_value).decode('utf-8')
-                    token_data = json.loads(decoded)
-                    logger.info("✅ Loaded Google User Token from Base64 environment variable")
-                    return token_data
-                except Exception as e:
-                    logger.error(f"❌ Error decoding GOOGLE_USER_TOKEN_JSON: {e}")
-        
-        # Fall back to file path (Local development)
-        try:
-            if not os.path.exists(self.token_path):
-                raise FileNotFoundError(f"Token file not found: {self.token_path}")
-            
-            with open(self.token_path, 'r') as f:
-                token_data = json.load(f)
-            logger.info(f"✅ Loaded Google User Token from file: {self.token_path}")
-            return token_data
-        except Exception as e:
-            logger.error(f"❌ Error loading token from file {self.token_path}: {e}")
-            raise
+    
     
     def _authenticate(self) -> None:
         """
@@ -93,7 +63,7 @@ class GoogleEmailClient:
         """
         try:
             # Load user credentials from token
-            token_data = self._load_token_data()
+            token_data = self.token_data
             
             # Create credentials from token
             self.credentials = UserCredentials.from_authorized_user_info(token_data, self.SCOPES)
@@ -102,7 +72,7 @@ class GoogleEmailClient:
             if self.credentials.expired and self.credentials.refresh_token:
                 request = Request()
                 self.credentials.refresh(request)
-                logger.info(f"Token refreshed for {self.token_path}")
+                logger.info("Token refreshed successfully")
             
             # Build Gmail service
             self.service = googleapiclient.discovery.build('gmail', 'v1', credentials=self.credentials)

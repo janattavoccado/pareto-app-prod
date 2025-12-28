@@ -1,18 +1,11 @@
-"""
-Email Action Executor with Pydantic Models - MODELRESPONSE FIXED
-Parses agent responses and executes Gmail API calls
-Handles ModelResponse objects from openai-agents
-
-File location: pareto_agents/email_action_executor.py
-"""
-
 import logging
 import re
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, EmailStr, Field
 
 from .google_email_client import GoogleEmailClient
-from .user_manager import get_user_manager
+from .user_manager_db_v2 import get_user_manager_db_v2
+from .config_loader_v2 import get_google_user_token_by_phone
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +63,7 @@ class EmailActionExecutor:
             phone_number (str): User's phone number (session ID)
         """
         self.phone_number = phone_number
-        self.user_manager = get_user_manager()
+        self.user_manager = get_user_manager_db_v2()
         self.email_client = None
         self._initialize_email_client()
     
@@ -83,13 +76,13 @@ class EmailActionExecutor:
                 logger.error(f"User not found: {self.phone_number}")
                 return
             
-            token_path = user_data.get("google_token_path")
+            token = get_google_user_token_by_phone(self.phone_number)
             
-            if not token_path:
-                logger.error(f"No Google token path for user: {self.phone_number}")
+            if not token:
+                logger.error(f"No Google token for user: {self.phone_number}")
                 return
             
-            self.email_client = GoogleEmailClient(token_path)
+            self.email_client = GoogleEmailClient(token)
             logger.info(f"Email client initialized for {self.phone_number}")
         
         except Exception as e:
@@ -199,10 +192,10 @@ class EmailActionExecutor:
             # Extract subject - try multiple patterns
             subject = None
             subject_patterns = [
-                r'(?:subject|subject:)\s*["\']?([^"\'\n]+)["\']?(?:\s|$)',
+                r'(?:subject|subject:)\s*["\']?([^"\']\n]+)["\']?(?:\s|$)',
                 r'subject:\s*([^\n]+)',
-                r'with subject\s+["\']?([^"\'\n]+)["\']?',
-                r'subject\s+["\']?([^"\'\n]+)["\']?',
+                r'with subject\s+["\']?([^"\']\n]+)["\']?',
+                r'subject\s+["\']?([^"\']\n]+)["\']?',
             ]
             
             for pattern in subject_patterns:
@@ -221,13 +214,13 @@ class EmailActionExecutor:
             # Extract body - try multiple patterns
             body = None
             body_patterns = [
-                r'(?:content|body|message):\s*["\']?([^"\'\n]+)["\']?(?:\s|$)',
+                r'(?:content|body|message):\s*["\']?([^"\']\n]+)["\']?(?:\s|$)',
                 r'content:\s*([^\n]+)',
                 r'body:\s*([^\n]+)',
                 r'message:\s*([^\n]+)',
                 r'and content:\s*([^\n]+)',
                 r'and body:\s*([^\n]+)',
-                r'with content\s+["\']?([^"\'\n]+)["\']?',
+                r'with content\s+["\']?([^"\']\n]+)["\']?',
             ]
             
             for pattern in body_patterns:

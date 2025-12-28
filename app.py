@@ -1,13 +1,10 @@
 """
-Flask Application Entry Point - With SQLite Database Integration
+Flask Application Entry Point - With Personal Assistant Integration
 
-This file has been updated to:
-1. Initialize SQLite database
-2. Register authentication routes
-3. Maintain backward compatibility with existing Chatwoot webhook
-4. Support both JSON (fallback) and SQLite user management
+This file has been updated to ensure all necessary components are imported and
+initialized correctly for the Personal Assistant agent to function.
 
-File location: app_new.py (rename to app.py after testing)
+File location: app_new.py
 """
 
 import os
@@ -18,15 +15,11 @@ from flask import Flask, request, jsonify, render_template, send_from_directory
 from pareto_agents.database import get_db_manager
 from pareto_agents.auth_routes import auth_bp
 from pareto_agents.admin_routes import admin_bp
-from pareto_agents.migrate_users import migrate_users_from_json
+from pareto_agents.token_routes import token_bp
 
-# Existing imports from the original app
-from pareto_agents.config_loader import (
-    get_google_client_secrets,
-    get_google_user_token,
-    get_user_config,
-    verify_all_configs
-)
+
+# Main application components
+from pareto_agents.config_loader_v2 import AppConfig
 from pareto_agents.chatwoot_webhook import webhook_handler
 
 # --- Configuration ---
@@ -51,38 +44,18 @@ except Exception as e:
     logger.error(f"❌ Database initialization failed: {e}")
     raise
 
-# --- User Migration (First Run) ---
-# Check if migration is needed
-if os.path.exists('configurations/users.json'):
-    logger.info("Detected users.json - checking if migration is needed...")
-    try:
-        from pareto_agents.database import get_db_session, User
-        session = get_db_session()
-        user_count = session.query(User).count()
-        session.close()
-        
-        if user_count == 0:
-            logger.info("Database is empty - running migration from users.json...")
-            if migrate_users_from_json(dry_run=False):
-                logger.info("✅ Migration completed successfully")
-            else:
-                logger.warning("⚠️  Migration failed - you may need to run it manually")
-        else:
-            logger.info(f"✅ Database already contains {user_count} users - skipping migration")
-    except Exception as e:
-        logger.warning(f"⚠️  Could not check migration status: {e}")
+# User migration from users.json has been removed.
 
 # --- Load configurations on startup ---
 logger.info("Loading and verifying all configurations...")
-google_client_secrets = get_google_client_secrets()
-google_user_token = get_google_user_token()
-user_config = get_user_config()
-verify_all_configs()
+AppConfig.load_configs()
+logger.info("✅ Configurations loaded.")
 
 # --- Register Blueprints ---
 logger.info("Registering API blueprints...")
 app.register_blueprint(auth_bp)
 app.register_blueprint(admin_bp)
+app.register_blueprint(token_bp)
 
 # --- Routes ---
 
@@ -116,23 +89,11 @@ def config_status():
     """Debugging endpoint to check config loading status"""
     status = {
         "environment": ENVIRONMENT,
-        "google_client_secrets": {
-            "loaded": bool(google_client_secrets),
-            "source": "Base64 Env Var (GOOGLE_CREDS_JSON)" if IS_HEROKU and google_client_secrets else "File (configurations/client_secrets.json)" if google_client_secrets else "Missing"
-        },
-        "google_user_token": {
-            "loaded": bool(google_user_token),
-            "source": "Base64 Env Var (GOOGLE_USER_TOKEN_JSON)" if IS_HEROKU and google_user_token else "File (configurations/tokens/jan_avoccado_pareto.json)" if google_user_token else "Missing"
-        },
-        "user_config": {
-            "loaded": bool(user_config),
-            "source": "Base64 Env Var (USER_CONFIG_JSON)" if IS_HEROKU and user_config else "File (configurations/users.json)" if user_config else "Missing"
-        },
         "database": {
             "initialized": True,
             "type": "SQLite"
         },
-        "all_verified": verify_all_configs()
+        "configs_loaded": AppConfig.is_loaded()
     }
     return jsonify(status), 200
 
@@ -149,7 +110,7 @@ def chatwoot_webhook():
         # The webhook_handler now accepts the data payload
         response = webhook_handler(data)
         
-        # Chatwoot expects a 200 OK response quickly, even if processing is async
+        # Chatwoot expects a 200 OK response quickly
         return jsonify({"status": "success", "message": "Webhook received and processing started"}), 200
         
     except Exception as e:
@@ -181,7 +142,6 @@ def internal_error(error):
 # --- Main Execution ---
 
 if __name__ == '__main__':
-    # Use Heroku's dynamic PORT or default to 8000 for local development
     port = int(os.environ.get('PORT', 8000))
     logger.info(f"Starting Flask server on port {port}")
     logger.info(f"Admin Dashboard: http://localhost:{port}/admin")

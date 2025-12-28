@@ -92,8 +92,9 @@ class User(Base):
     last_name = Column(String(255), nullable=False)
     email = Column(String(255))
     is_enabled = Column(Boolean, default=True)
-    google_token_path = Column(String(500))
-    google_token_json = Column(Text)  # Encrypted JSON storage
+    # Google token stored as Base64 encrypted string (replaces file-based tokens)
+    google_token_base64 = Column(Text, nullable=True)
+    google_token_updated_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -111,6 +112,10 @@ class User(Base):
     def full_name(self) -> str:
         """Get user's full name"""
         return f"{self.first_name} {self.last_name}".strip()
+    
+    def has_google_token(self) -> bool:
+        """Check if user has a Google token configured"""
+        return bool(self.google_token_base64)
     
     def __repr__(self):
         return f"<User(id={self.id}, phone={self.phone_number}, name={self.full_name})>"

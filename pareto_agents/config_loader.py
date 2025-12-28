@@ -149,9 +149,25 @@ class ConfigLoader:
             Google user token dictionary or None
         """
         
-        # Try Base64 environment variable first (Heroku)
         logger.info("Attempting to load Google User Token...")
         
+        # Try database first
+        try:
+            from .database import get_db_session, User
+            session = get_db_session()
+            user = session.query(User).filter(User.google_token_base64 != None).first()
+            session.close()
+            
+            if user and user.google_token_base64:
+                from .token_manager import TokenManager
+                token = TokenManager.decode_token(user.google_token_base64)
+                if token:
+                    logger.info(f"✅ Google User Token found in database")
+                    return token
+        except Exception as e:
+            logger.debug(f"Could not load token from database: {e}")
+        
+        # Try Base64 environment variable (Heroku)
         token = ConfigLoader._load_base64_json_or_file(
             env_var_name='GOOGLE_USER_TOKEN_JSON',
             local_path='configurations/tokens/jan_avoccado_pareto.json'
@@ -162,8 +178,6 @@ class ConfigLoader:
             return token
         
         logger.error("❌ Google User Token not found!")
-        logger.error("   Set GOOGLE_USER_TOKEN_JSON env var (Base64, Heroku)")
-        logger.error("   OR create configurations/tokens/jan_avoccado_pareto.json (Local)")
         return None
     
     @staticmethod
