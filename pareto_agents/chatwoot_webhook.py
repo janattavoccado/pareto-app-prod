@@ -106,6 +106,8 @@ def webhook_handler(payload):
         is_audio = any(att.get("file_type") == "audio" for att in attachments)
 
         message_to_process = content
+        user_data["is_audio_message"] = is_audio
+
         if is_audio:
             logger.info(f"Starting audio message handling for {phone_number}")
             from .audio_transcriber import AudioTranscriber

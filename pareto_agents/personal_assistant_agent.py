@@ -1,6 +1,7 @@
 import logging
 from typing import Optional, Dict, Any
 from agents import Agent, Runner
+from .date_utils import get_current_date_context
 from .assistant_tools import (
     get_calendar_events,
     get_email_summary,
@@ -20,7 +21,7 @@ personal_assistant_agent = Agent(
     tools=ASSISTANT_TOOLS,
     handoff_description="Specialist agent for complex multi-step tasks combining calendar and email operations",
     instructions=(
-        "IMPORTANT: Today's date is 2025-12-29. You MUST use this date for all calculations. The user is in GMT+1. When the user asks for 'tomorrow', you must calculate the correct date (2025-12-30) and use it in your tool calls. You are a personal assistant that helps users with complex tasks involving calendar and email management. "
+        f"IMPORTANT: {get_current_date_context()} You are a personal assistant that helps users with complex tasks involving calendar and email management. "
         "You have access to tools that allow you to:\n"
         "1. Get calendar events (today, specific date, week, or summary)\n"
         "2. Get email summaries (unread, recent, or search results)\n"

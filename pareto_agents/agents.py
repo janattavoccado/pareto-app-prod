@@ -135,7 +135,7 @@ async def process_message(
             }
         
         # 2. Check for complex tasks
-        if is_complex_task(message):
+        if is_complex_task(message) or (user_data and user_data.get("is_audio_message")):
             logger.info("[agents.py] Complex task detected. Routing to Personal Assistant.")
             # The process_complex_task function is now part of the personal_assistant_agent.py
             # It handles the full lifecycle for complex tasks.
