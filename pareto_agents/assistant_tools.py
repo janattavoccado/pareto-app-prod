@@ -92,7 +92,11 @@ def get_calendar_events(
         
         # Perform operation
         if operation == 'list_today':
-            events = calendar_client.get_today_events()
+            today = datetime.now().date()
+            time_min = datetime.combine(today, datetime.min.time())
+            time_max = datetime.combine(today, datetime.max.time())
+            events_response = calendar_client.get_events(time_min=time_min, time_max=time_max)
+            events = events_response.get('events', [])
             summary = f"You have {len(events)} event(s) today"
             
         elif operation == 'list_date' and date:
@@ -109,11 +113,21 @@ def get_calendar_events(
             summary = f"You have {len(events)} event(s) on {date}"
             
         elif operation == 'list_week':
-            events = calendar_client.get_week_events()
+            today = datetime.now().date()
+            start_of_week = today - timedelta(days=today.weekday())
+            end_of_week = start_of_week + timedelta(days=6)
+            time_min = datetime.combine(start_of_week, datetime.min.time())
+            time_max = datetime.combine(end_of_week, datetime.max.time())
+            events_response = calendar_client.get_events(time_min=time_min, time_max=time_max)
+            events = events_response.get('events', [])
             summary = f"You have {len(events)} event(s) this week"
             
         elif operation == 'get_summary':
-            events = calendar_client.get_upcoming_events(days=7)
+            today = datetime.now().date()
+            time_min = datetime.combine(today, datetime.min.time())
+            time_max = datetime.combine(today + timedelta(days=7), datetime.max.time())
+            events_response = calendar_client.get_events(time_min=time_min, time_max=time_max)
+            events = events_response.get('events', [])
             summary = f"Upcoming events (next 7 days): {len(events)} event(s)"
             
         else:
@@ -229,15 +243,15 @@ def get_email_summary(
         
         # Perform operation
         if operation == 'list_unread':
-            emails = email_client.get_unread_emails(limit=limit)
+            emails = email_client.get_email_summary(query='is:unread', limit=limit)
             summary = f"You have {len(emails)} unread email(s)"
             
         elif operation == 'get_summary':
-            emails = email_client.get_recent_emails(limit=limit)
+            emails = email_client.get_email_summary(query='in:inbox', limit=limit)
             summary = f"Recent emails: {len(emails)} message(s)"
             
         elif operation == 'search' and search_query:
-            emails = email_client.search_emails(search_query, limit=limit)
+            emails = email_client.get_email_summary(query=search_query, limit=limit)
             summary = f"Search results for '{search_query}': {len(emails)} message(s)"
             
         else:

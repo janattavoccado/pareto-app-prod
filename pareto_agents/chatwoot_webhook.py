@@ -107,8 +107,34 @@ def webhook_handler(payload):
 
         message_to_process = content
         if is_audio:
-            # (Audio processing logic remains the same)
-            pass # Placeholder for brevity
+            logger.info(f"Starting audio message handling for {phone_number}")
+            from .audio_transcriber import AudioTranscriber
+
+            audio_url = None
+            for attachment in attachments:
+                if attachment.get("file_type") == "audio":
+                    audio_url = attachment.get("data_url")
+                    break
+
+            if not audio_url:
+                logger.error("Audio attachment found but no URL")
+                return {"error": "Audio URL not found"}
+
+            logger.info(f"Transcribing audio message...")
+            transcriber = AudioTranscriber()
+            transcribed_text = transcriber.transcribe_from_url(audio_url)
+
+            if not transcribed_text:
+                logger.error("Audio transcription failed")
+                ChatwootClient().send_message(
+                    conversation_id=conversation_id,
+                    message_text="Failed to transcribe audio message",
+                    private=False
+                )
+                return {"status": "transcription_failed"}
+
+            logger.info(f"Audio transcribed successfully: {transcribed_text[:100]}...")
+            message_to_process = transcribed_text
 
         if not message_to_process and not attachments:
             logger.warning("No content or attachments to process.")
