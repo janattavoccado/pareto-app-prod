@@ -1,7 +1,7 @@
 import os
 import datetime
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Text, ForeignKey
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.ext.declarative import declarative_base
 
 # --- Database Configuration ---
@@ -43,6 +43,8 @@ class User(Base):
         return f"<User(phone_number='{self.phone_number}', email='{self.email}')>"
 
 class Administrator(Base):
+    sessions = relationship("AdminSession", back_populates="administrator")
+    audit_logs = relationship("AuditLog", back_populates="administrator")
     """Database model for application administrators."""
     __tablename__ = 'administrators'
     
@@ -60,6 +62,7 @@ class Administrator(Base):
         return f"<Administrator(username='{self.username}')>"
 
 class AdminSession(Base):
+    administrator = relationship("Administrator", back_populates="sessions")
     """Database model for administrator sessions."""
     __tablename__ = 'admin_sessions'
     
@@ -72,10 +75,15 @@ class AdminSession(Base):
     user_agent = Column(String) # Added missing column
     is_active = Column(Boolean, default=True) # Added missing column from log error
     
+    @property
+    def is_expired(self):
+        return datetime.datetime.utcnow() > self.expires_at
+
     def __repr__(self):
         return f"<AdminSession(admin_id='{self.admin_id}', token='{self.session_token[:10]}...')>"
 
 class AuditLog(Base):
+    administrator = relationship("Administrator", back_populates="audit_logs")
     """Database model for audit logging of administrative actions."""
     __tablename__ = 'audit_logs'
     
