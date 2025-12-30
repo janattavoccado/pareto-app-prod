@@ -1,24 +1,25 @@
 /**
- * Pareto Admin Dashboard - JavaScript (v3 - Full CRUD)
- * Handles all dashboard functionality, API calls, and UI interactions
- * for Dashboard, Tenants, and Users pages.
+ * Pareto Admin Dashboard - JavaScript (Final Version)
+ * Complete implementation with authentication, dashboard, tenants, and users CRUD
  */
 
-const API_BASE_URL = window.location.origin + 
-'/api';
+const API_BASE_URL = window.location.origin + '/api';
 let sessionToken = localStorage.getItem('sessionToken');
 let currentAdminInfo = null;
-let currentEditingId = null; // Used for both tenants and users
+let currentEditingId = null;
 
 // ============================================================================
 // Initialization
 // ============================================================================
 
 document.addEventListener('DOMContentLoaded', async () => {
+    console.log('🔧 Dashboard initializing...');
     setupEventListeners();
     if (sessionToken) {
+        console.log('🔍 Validating existing session...');
         await validateSession();
     } else {
+        console.log('❌ No session token, showing login');
         showLoginModal();
     }
 });
@@ -28,75 +29,169 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ============================================================================
 
 function setupEventListeners() {
-    // Main navigation
-    document.getElementById('logoutBtn').addEventListener('click', logout);
-    document.getElementById('loginForm').addEventListener('submit', handleLogin);
+    const loginForm = document.getElementById('loginForm');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const addTenantBtn = document.getElementById('addTenantBtn');
+    const tenantForm = document.getElementById('tenantForm');
+    const addUserBtn = document.getElementById('addUserBtn');
+    const userForm = document.getElementById('userForm');
+    
+    if (loginForm) loginForm.addEventListener('submit', handleLogin);
+    if (logoutBtn) logoutBtn.addEventListener('click', logout);
+    if (addTenantBtn) addTenantBtn.addEventListener('click', () => openTenantModal(null));
+    if (tenantForm) tenantForm.addEventListener('submit', handleSaveTenant);
+    if (addUserBtn) addUserBtn.addEventListener('click', () => openUserModal(null));
+    if (userForm) userForm.addEventListener('submit', handleSaveUser);
+    
     document.querySelectorAll('.sidebar-item').forEach(item => {
         item.addEventListener('click', () => navigateToPage(item.dataset.page));
     });
-
-    // Tenant page
-    document.getElementById('addTenantBtn').addEventListener('click', openTenantModal);
-    document.getElementById('tenantForm').addEventListener('submit', handleSaveTenant);
-
-    // User page
-    document.getElementById('addUserBtn').addEventListener('click', openUserModal);
-    document.getElementById('userForm').addEventListener('submit', handleSaveUser);
 }
 
 // ============================================================================
-// Authentication & Session
+// Authentication
 // ============================================================================
 
 async function handleLogin(e) {
     e.preventDefault();
-    // ... (implementation from previous turn, no changes needed)
-}
-
-async function validateSession() {
-    // ... (implementation from previous turn, no changes needed)
-}
-
-async function logout(soft = false) {
-    // ... (implementation from previous turn, no changes needed)
-}
-
-function showLoginModal() {
-    // ... (implementation from previous turn, no changes needed)
-}
-
-function hideLoginModal() {
-    // ... (implementation from previous turn, no changes needed)
-}
-
-function updateAdminInfo() {
-    // ... (implementation from previous turn, no changes needed)
-}
-
-// ============================================================================
-// Navigation
-// ============================================================================
-
-function navigateToPage(page) {
-    document.querySelectorAll('.sidebar-item').forEach(item => item.classList.remove('active'));
-    document.querySelector(`[data-page="${page}"]`).classList.add('active');
-
-    document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
-    document.getElementById(`${page}Page`).classList.remove('hidden');
-
-    // Dynamically load data for the selected page
-    const loadFunction = window['load' + page.charAt(0).toUpperCase() + page.slice(1)];
-    if (typeof loadFunction === 'function') {
-        loadFunction();
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        
+        const data = await response.json();
+        if (data.success && data.session_token) {
+            sessionToken = data.session_token;
+            localStorage.setItem('sessionToken', sessionToken);
+            currentAdminInfo = data.admin;
+            hideLoginModal();
+            updateAdminInfo();
+            await loadDashboard();
+            navigateToPage('dashboard');
+            showAlert('Login successful!', 'success');
+        } else {
+            showAlert(data.message || 'Login failed', 'error');
+        }
+    } catch (error) {
+        console.error('Login error:', error);
+        showAlert('An error occurred during login', 'error');
     }
 }
 
+async function validateSession() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/auth/validate`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        
+        const data = await response.json();
+        if (data.success && data.admin) {
+            currentAdminInfo = data.admin;
+            hideLoginModal();
+            updateAdminInfo();
+            await loadDashboard();
+            navigateToPage('dashboard');
+        } else {
+            logout(true);
+        }
+    } catch (error) {
+        console.error('Session validation error:', error);
+        logout(true);
+    }
+}
+
+async function logout(soft = false) {
+    if (sessionToken) {
+        try {
+            await fetch(`${API_BASE_URL}/auth/logout`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${sessionToken}` }
+            });
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
+    }
+    sessionToken = null;
+    localStorage.removeItem('sessionToken');
+    currentAdminInfo = null;
+    showLoginModal();
+    if (!soft) showAlert('You have been logged out', 'info');
+}
+
 // ============================================================================
-// Dashboard Page
+// UI Management
+// ============================================================================
+
+function showLoginModal() {
+    const modal = document.getElementById('loginModal');
+    const container = document.querySelector('.container-main');
+    if (modal) modal.classList.add('active');
+    if (container) container.style.display = 'none';
+}
+
+function hideLoginModal() {
+    const modal = document.getElementById('loginModal');
+    const container = document.querySelector('.container-main');
+    if (modal) modal.classList.remove('active');
+    if (container) container.style.display = 'flex';
+}
+
+function updateAdminInfo() {
+    if (currentAdminInfo) {
+        const nameEl = document.getElementById('adminName');
+        const avatarEl = document.getElementById('userAvatar');
+        if (nameEl) nameEl.textContent = currentAdminInfo.username || 'Admin';
+        if (avatarEl) {
+            let initials = 'AD';
+            if (currentAdminInfo.full_name && typeof currentAdminInfo.full_name === 'string') {
+                initials = currentAdminInfo.full_name.split(' ').map(n => n[0]).join('').toUpperCase();
+            } else if (currentAdminInfo.username) {
+                initials = currentAdminInfo.username.substring(0, 2).toUpperCase();
+            }
+            avatarEl.textContent = initials;
+        }
+    }
+}
+
+function navigateToPage(page) {
+    document.querySelectorAll('.sidebar-item').forEach(item => item.classList.remove('active'));
+    const activeItem = document.querySelector(`[data-page="${page}"]`);
+    if (activeItem) activeItem.classList.add('active');
+    
+    document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+    const pageEl = document.getElementById(`${page}Page`);
+    if (pageEl) pageEl.classList.remove('hidden');
+    
+    if (page === 'dashboard') loadDashboard();
+    else if (page === 'tenants') loadTenants();
+    else if (page === 'users') loadUsers();
+}
+
+// ============================================================================
+// Dashboard
 // ============================================================================
 
 async function loadDashboard() {
-    // ... (implementation from previous turn, no changes needed)
+    try {
+        const result = await apiRequest('/admin/dashboard');
+        if (result.success && result.data) {
+            const stats = result.data.statistics || {};
+            const totalTenantsEl = document.getElementById('totalTenants');
+            const totalUsersEl = document.getElementById('totalUsers');
+            const totalAdminsEl = document.getElementById('totalAdmins');
+            
+            if (totalTenantsEl) totalTenantsEl.textContent = stats.tenant_count ?? '0';
+            if (totalUsersEl) totalUsersEl.textContent = stats.user_count ?? '0';
+            if (totalAdminsEl) totalAdminsEl.textContent = stats.admin_count ?? '0';
+        }
+    } catch (error) {
+        showAlert('Failed to load dashboard', 'error');
+    }
 }
 
 // ============================================================================
@@ -107,53 +202,87 @@ async function loadTenants() {
     try {
         const result = await apiRequest('/admin/tenants');
         if (result.success) {
-            renderTable('tenantsTable', result.data, ['name', 'is_active'], openTenantModal, deleteTenant);
+            renderTenantsTable(result.data);
         }
     } catch (error) {
-        showAlert('Failed to load tenants.', 'error');
+        showAlert('Failed to load tenants', 'error');
     }
 }
 
-function openTenantModal(tenant = null) {
+function renderTenantsTable(tenants) {
+    const tbody = document.getElementById('tenantsTable')?.querySelector('tbody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    if (!tenants || tenants.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align: center;">No tenants found</td></tr>';
+        return;
+    }
+    
+    tenants.forEach(tenant => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${tenant.name}</td>
+            <td>${tenant.is_active ? '✓ Active' : '✗ Inactive'}</td>
+            <td>
+                <button class="btn-sm" onclick="openTenantModal(${JSON.stringify(tenant).replace(/"/g, '&quot;')})">Edit</button>
+                <button class="btn-sm btn-danger" onclick="deleteTenant(${tenant.id})">Delete</button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function openTenantModal(tenant) {
     currentEditingId = tenant ? tenant.id : null;
-    document.getElementById('tenantModalTitle').textContent = tenant ? 'Edit Tenant' : 'Add New Tenant';
-    document.getElementById('tenantName').value = tenant ? tenant.name : '';
-    document.getElementById('tenantIsActive').checked = tenant ? tenant.is_active : true;
-    document.getElementById('tenantModal').classList.add('active');
+    const titleEl = document.getElementById('tenantModalTitle');
+    const nameEl = document.getElementById('tenantName');
+    const activeEl = document.getElementById('tenantIsActive');
+    
+    if (titleEl) titleEl.textContent = tenant ? 'Edit Tenant' : 'Add New Tenant';
+    if (nameEl) nameEl.value = tenant ? tenant.name : '';
+    if (activeEl) activeEl.checked = tenant ? tenant.is_active : true;
+    
+    const modal = document.getElementById('tenantModal');
+    if (modal) modal.classList.add('active');
 }
 
 async function handleSaveTenant(e) {
     e.preventDefault();
-    const tenantData = {
-        name: document.getElementById('tenantName').value,
-        is_active: document.getElementById('tenantIsActive').checked,
+    const nameEl = document.getElementById('tenantName');
+    const activeEl = document.getElementById('tenantIsActive');
+    
+    const data = {
+        name: nameEl?.value || '',
+        is_active: activeEl?.checked || true
     };
-
+    
     const endpoint = currentEditingId ? `/admin/tenants/${currentEditingId}` : '/admin/tenants';
     const method = currentEditingId ? 'PUT' : 'POST';
-
+    
     try {
-        const result = await apiRequest(endpoint, { method, body: JSON.stringify(tenantData) });
+        const result = await apiRequest(endpoint, { method, body: JSON.stringify(data) });
         if (result.success) {
             showAlert(`Tenant ${currentEditingId ? 'updated' : 'created'} successfully!`, 'success');
-            document.getElementById('tenantModal').classList.remove('active');
-            loadTenants(); // Refresh the table
+            const modal = document.getElementById('tenantModal');
+            if (modal) modal.classList.remove('active');
+            loadTenants();
         }
     } catch (error) {
-        // Error is already shown by apiRequest
+        // Error already shown
     }
 }
 
-async function deleteTenant(tenantId) {
-    if (confirm('Are you sure you want to delete this tenant?')) {
+async function deleteTenant(id) {
+    if (confirm('Delete this tenant?')) {
         try {
-            const result = await apiRequest(`/admin/tenants/${tenantId}`, { method: 'DELETE' });
+            const result = await apiRequest(`/admin/tenants/${id}`, { method: 'DELETE' });
             if (result.success) {
-                showAlert('Tenant deleted successfully!', 'success');
-                loadTenants(); // Refresh the table
+                showAlert('Tenant deleted!', 'success');
+                loadTenants();
             }
         } catch (error) {
-            // Error is already shown by apiRequest
+            // Error already shown
         }
     }
 }
@@ -166,120 +295,148 @@ async function loadUsers() {
     try {
         const result = await apiRequest('/admin/users');
         if (result.success) {
-            renderTable('usersTable', result.data, ['phone_number', 'email', 'first_name', 'last_name', 'is_enabled'], openUserModal, deleteUser);
+            renderUsersTable(result.data);
         }
     } catch (error) {
-        showAlert('Failed to load users.', 'error');
+        showAlert('Failed to load users', 'error');
     }
 }
 
-function openUserModal(user = null) {
-    currentEditingId = user ? user.id : null;
-    document.getElementById('userModalTitle').textContent = user ? 'Edit User' : 'Add New User';
-    document.getElementById('userPhoneNumber').value = user ? user.phone_number : '';
-    document.getElementById('userEmail').value = user ? user.email : '';
-    document.getElementById('userFirstName').value = user ? user.first_name : '';
-    document.getElementById('userLastName').value = user ? user.last_name : '';
-    document.getElementById('userIsEnabled').checked = user ? user.is_enabled : true;
-    // You might need to load tenants into a dropdown here
-    document.getElementById('userModal').classList.add('active');
-}
-
-async function handleSaveUser(e) {
-    e.preventDefault();
-    const userData = {
-        phone_number: document.getElementById('userPhoneNumber').value,
-        email: document.getElementById('userEmail').value,
-        first_name: document.getElementById('userFirstName').value,
-        last_name: document.getElementById('userLastName').value,
-        is_enabled: document.getElementById('userIsEnabled').checked,
-        // tenant_id: ... get from a dropdown
-    };
-
-    const endpoint = currentEditingId ? `/admin/users/${currentEditingId}` : '/admin/users';
-    const method = currentEditingId ? 'PUT' : 'POST';
-
-    try {
-        const result = await apiRequest(endpoint, { method, body: JSON.stringify(userData) });
-        if (result.success) {
-            showAlert(`User ${currentEditingId ? 'updated' : 'created'} successfully!`, 'success');
-            document.getElementById('userModal').classList.remove('active');
-            loadUsers(); // Refresh the table
-        }
-    } catch (error) {
-        // Error is already shown by apiRequest
-    }
-}
-
-async function deleteUser(userId) {
-    if (confirm('Are you sure you want to delete this user?')) {
-        try {
-            const result = await apiRequest(`/admin/users/${userId}`, { method: 'DELETE' });
-            if (result.success) {
-                showAlert('User deleted successfully!', 'success');
-                loadUsers(); // Refresh the table
-            }
-        } catch (error) {
-            // Error is already shown by apiRequest
-        }
-    }
-}
-
-// ============================================================================
-// Generic Helper Functions
-// ============================================================================
-
-/**
- * Generic function to render data into a table.
- * @param {string} tableId - The ID of the table body.
- * @param {Array} data - The array of data objects.
- * @param {Array} columns - The keys of the data to display in order.
- * @param {Function} editCallback - Function to call when edit button is clicked.
- * @param {Function} deleteCallback - Function to call when delete button is clicked.
- */
-function renderTable(tableId, data, columns, editCallback, deleteCallback) {
-    const tbody = document.getElementById(tableId).querySelector('tbody');
+function renderUsersTable(users) {
+    const tbody = document.getElementById('usersTable')?.querySelector('tbody');
+    if (!tbody) return;
+    
     tbody.innerHTML = '';
-
-    if (!data || data.length === 0) {
-        const colSpan = columns.length + 1; // +1 for actions column
-        tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center">No data available</td></tr>`;
+    if (!users || users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No users found</td></tr>';
         return;
     }
-
-    data.forEach(item => {
+    
+    users.forEach(user => {
         const row = document.createElement('tr');
-        
-        columns.forEach(col => {
-            const cell = document.createElement('td');
-            cell.textContent = item[col];
-            row.appendChild(cell);
-        });
-
-        // Actions cell
-        const actionsCell = document.createElement('td');
-        const editBtn = document.createElement('button');
-        editBtn.textContent = 'Edit';
-        editBtn.className = 'btn btn-sm btn-secondary';
-        editBtn.onclick = () => editCallback(item);
-        
-        const deleteBtn = document.createElement('button');
-        deleteBtn.textContent = 'Delete';
-        deleteBtn.className = 'btn btn-sm btn-danger';
-        deleteBtn.onclick = () => deleteCallback(item.id);
-
-        actionsCell.appendChild(editBtn);
-        actionsCell.appendChild(deleteBtn);
-        row.appendChild(actionsCell);
-
+        row.innerHTML = `
+            <td>${user.phone_number}</td>
+            <td>${user.email || 'N/A'}</td>
+            <td>${user.first_name || ''} ${user.last_name || ''}</td>
+            <td>${user.is_enabled ? '✓ Enabled' : '✗ Disabled'}</td>
+            <td>
+                <button class="btn-sm" onclick="openUserModal(${JSON.stringify(user).replace(/"/g, '&quot;')})">Edit</button>
+                <button class="btn-sm btn-danger" onclick="deleteUser(${user.id})">Delete</button>
+            </td>
+        `;
         tbody.appendChild(row);
     });
 }
 
+function openUserModal(user) {
+    currentEditingId = user ? user.id : null;
+    const titleEl = document.getElementById('userModalTitle');
+    const phoneEl = document.getElementById('userPhoneNumber');
+    const emailEl = document.getElementById('userEmail');
+    const firstEl = document.getElementById('userFirstName');
+    const lastEl = document.getElementById('userLastName');
+    const enabledEl = document.getElementById('userIsEnabled');
+    
+    if (titleEl) titleEl.textContent = user ? 'Edit User' : 'Add New User';
+    if (phoneEl) phoneEl.value = user ? user.phone_number : '';
+    if (emailEl) emailEl.value = user ? user.email : '';
+    if (firstEl) firstEl.value = user ? user.first_name : '';
+    if (lastEl) lastEl.value = user ? user.last_name : '';
+    if (enabledEl) enabledEl.checked = user ? user.is_enabled : true;
+    
+    const modal = document.getElementById('userModal');
+    if (modal) modal.classList.add('active');
+}
+
+async function handleSaveUser(e) {
+    e.preventDefault();
+    const phoneEl = document.getElementById('userPhoneNumber');
+    const emailEl = document.getElementById('userEmail');
+    const firstEl = document.getElementById('userFirstName');
+    const lastEl = document.getElementById('userLastName');
+    const enabledEl = document.getElementById('userIsEnabled');
+    
+    const data = {
+        phone_number: phoneEl?.value || '',
+        email: emailEl?.value || '',
+        first_name: firstEl?.value || '',
+        last_name: lastEl?.value || '',
+        is_enabled: enabledEl?.checked || true
+    };
+    
+    const endpoint = currentEditingId ? `/admin/users/${currentEditingId}` : '/admin/users';
+    const method = currentEditingId ? 'PUT' : 'POST';
+    
+    try {
+        const result = await apiRequest(endpoint, { method, body: JSON.stringify(data) });
+        if (result.success) {
+            showAlert(`User ${currentEditingId ? 'updated' : 'created'} successfully!`, 'success');
+            const modal = document.getElementById('userModal');
+            if (modal) modal.classList.remove('active');
+            loadUsers();
+        }
+    } catch (error) {
+        // Error already shown
+    }
+}
+
+async function deleteUser(id) {
+    if (confirm('Delete this user?')) {
+        try {
+            const result = await apiRequest(`/admin/users/${id}`, { method: 'DELETE' });
+            if (result.success) {
+                showAlert('User deleted!', 'success');
+                loadUsers();
+            }
+        } catch (error) {
+            // Error already shown
+        }
+    }
+}
+
+// ============================================================================
+// Utilities
+// ============================================================================
+
 async function apiRequest(endpoint, options = {}) {
-    // ... (implementation from previous turn, no changes needed)
+    const config = {
+        headers: {
+            'Authorization': `Bearer ${sessionToken}`,
+            'Content-Type': 'application/json',
+            ...options.headers
+        },
+        ...options
+    };
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+        const data = await response.json();
+        if (!response.ok) {
+            showAlert(data.message || `Error: ${response.status}`, 'error');
+            throw new Error(data.message || `HTTP ${response.status}`);
+        }
+        return data;
+    } catch (error) {
+        console.error(`API error: ${endpoint}`, error);
+        throw error;
+    }
 }
 
 function showAlert(message, type = 'info') {
-    // ... (implementation from previous turn, no changes needed)
+    const container = document.getElementById('alertContainer');
+    if (!container) return;
+    
+    const alert = document.createElement('div');
+    alert.className = `alert alert-${type}`;
+    alert.textContent = message;
+    alert.style.padding = '12px 16px';
+    alert.style.marginBottom = '8px';
+    alert.style.borderRadius = '4px';
+    alert.style.backgroundColor = type === 'success' ? '#d4edda' : type === 'error' ? '#f8d7da' : '#d1ecf1';
+    alert.style.color = type === 'success' ? '#155724' : type === 'error' ? '#721c24' : '#0c5460';
+    
+    container.appendChild(alert);
+    setTimeout(() => alert.remove(), 5000);
 }
+
+console.log('✅ Dashboard script loaded');
