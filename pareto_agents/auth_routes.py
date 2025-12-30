@@ -1,4 +1,5 @@
-'''
+
+"""
 Authentication API Routes
 
 Provides Flask endpoints for:
@@ -8,13 +9,14 @@ Provides Flask endpoints for:
 - Password change
 
 File location: pareto_agents/auth_routes.py
-'''
+"""
 
 import logging
 from flask import Blueprint, request, jsonify, make_response
+from datetime import datetime, timedelta
 
 from .auth import AuthenticationService, SessionManager, PasswordManager, require_auth
-from .database import get_db_session, Administrator
+from .database import get_db_session, Administrator, AdminSession
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +29,7 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 # ============================================================================
 
 
-@auth_bp.route("/login", methods=['POST'])
+@auth_bp.route("/login", methods=["POST"])
 def login():
     """
     Administrator login endpoint
@@ -117,7 +119,7 @@ def login():
         )
 
 
-@auth_bp.route("/logout", methods=['POST'])
+@auth_bp.route("/logout", methods=["POST"])
 @require_auth
 def logout():
     """
@@ -143,7 +145,7 @@ def logout():
         )
 
 
-@auth_bp.route("/validate", methods=['GET'])
+@auth_bp.route("/validate", methods=["GET"])
 @require_auth
 def validate_session():
     """
@@ -151,12 +153,25 @@ def validate_session():
     """
     try:
         admin_info = request.admin_info
-        
-        # Ensure admin_id is included for compatibility with other routes
+        session_token = request.session_token
+
+        # Get session expiration from the database
+        session = get_db_session()
+        try:
+            admin_session = session.query(AdminSession).filter_by(session_token=session_token).first()
+            if admin_session and admin_session.expires_at:
+                admin_info["expires_at"] = admin_session.expires_at.isoformat()
+            else:
+                # Fallback if expires_at is not in the session object
+                admin_info["expires_at"] = (datetime.utcnow() + timedelta(hours=24)).isoformat()
+        finally:
+            session.close()
+
+        # Ensure admin_id is included for compatibility
         if "admin_id" not in admin_info and "id" in admin_info:
             admin_info["admin_id"] = admin_info["id"]
 
-        logger.info(f"✅ Session validated for {admin_info.get('username')}")
+        logger.info(f"✅ Session validated for {admin_info.get("username")}")
         return jsonify({"success": True, "admin": admin_info}), 200
 
     except Exception as e:
@@ -169,7 +184,7 @@ def validate_session():
         )
 
 
-@auth_bp.route("/change-password", methods=['POST'])
+@auth_bp.route("/change-password", methods=["POST"])
 @require_auth
 def change_password():
     """
@@ -199,7 +214,6 @@ def change_password():
             )
 
         # Change password
-        # Use .get() to safely access admin_id or id
         admin_id = admin_info.get("admin_id") or admin_info.get("id")
         if not admin_id:
             return jsonify({"success": False, "message": "Admin ID not found in session"}), 400
@@ -211,7 +225,7 @@ def change_password():
         )
 
         if success:
-            logger.info(f"✅ Password changed for {admin_info.get('username')}")
+            logger.info(f"✅ Password changed for {admin_info.get("username")}")
             return jsonify({"success": True, "message": message}), 200
         else:
             logger.warning(f"❌ Password change failed: {message}")
@@ -227,7 +241,7 @@ def change_password():
 # ============================================================================
 
 
-@auth_bp.route("/health", methods=['GET'])
+@auth_bp.route("/health", methods=["GET"])
 def auth_health():
     """
     Health check endpoint for authentication service
