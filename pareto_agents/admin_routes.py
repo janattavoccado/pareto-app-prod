@@ -297,9 +297,7 @@ def get_users():
         }), 500
 
 
-@admin_bp.route("/users/<int:user_id>", methods=["GET"])
-@require_auth
-def get_user(user_id):
+
     """
     Get a specific user
     """
@@ -660,9 +658,7 @@ def google_oauth_callback():
         session.close()
 
 
-@admin_bp.route("/users/<int:user_id>", methods=["GET"])
-@require_auth
-def get_user(user_id):
+
     """
     Get a specific user
     """
