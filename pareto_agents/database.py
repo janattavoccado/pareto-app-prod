@@ -18,6 +18,8 @@ class Tenant(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True, nullable=False)
     is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     
     def __repr__(self):
         return f"<Tenant(name='{self.name}')>"
@@ -34,6 +36,8 @@ class User(Base):
     email = Column(String)
     is_enabled = Column(Boolean, default=False)
     google_token_base64 = Column(String) # Stores the base64 encoded Google token
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     
     def __repr__(self):
         return f"<User(phone_number='{self.phone_number}', email='{self.email}')>"
@@ -46,6 +50,9 @@ class Administrator(Base):
     username = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
+    last_login = Column(DateTime) # Added missing column from log error
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     
     def __repr__(self):
         return f"<Administrator(username='{self.username}')>"
@@ -77,6 +84,7 @@ class AuditLog(Base):
     details = Column(Text)
     ip_address = Column(String) # Added missing column
     user_agent = Column(String) # Added missing column
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
     
     def __repr__(self):
         return f"<AuditLog(action='{self.action}', timestamp='{self.timestamp}')>"
