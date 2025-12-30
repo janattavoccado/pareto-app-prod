@@ -59,6 +59,8 @@ class AdminSession(Base):
     session_token = Column(String, unique=True, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     expires_at = Column(DateTime, nullable=False)
+    ip_address = Column(String) # Added missing column
+    user_agent = Column(String) # Added missing column
     
     def __repr__(self):
         return f"<AdminSession(admin_id='{self.admin_id}', token='{self.session_token[:10]}...')>"
