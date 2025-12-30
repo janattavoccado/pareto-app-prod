@@ -150,17 +150,7 @@ def get_users():
     finally:
         session.close()
 
-@admin_bp.route("/users/<int:user_id>", methods=["GET"])
-@require_auth
-def get_user(user_id):
-    session = get_db_session()
-    try:
-        user = session.query(User).filter_by(id=user_id).first()
-        if not user:
-            return jsonify({"success": False, "message": "User not found"}), 404
-        return jsonify({"success": True, "data": user.to_dict()}), 200
-    finally:
-        session.close()
+
 
 @admin_bp.route("/users", methods=["POST"])
 @require_auth
