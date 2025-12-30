@@ -232,6 +232,10 @@ function navigateToPage(page) {
         // Load page data
         if (page === 'dashboard') {
             loadDashboard();
+        } else if (page === 'tenants') {
+            loadTenants();
+        } else if (page === 'users') {
+            loadUsers();
         }
     }
 }
@@ -344,9 +348,98 @@ function showAlert(message, type = 'info') {
     setTimeout(() => alert.remove(), 5000);
 }
 
-// Placeholder functions to prevent errors
-async function loadTenants() { console.log('📋 Loading tenants...'); }
-async function loadUsers() { console.log('👥 Loading users...'); }
+// ============================================================================
+// Tenants Page
+// ============================================================================
+
+async function loadTenants() {
+    console.log('📋 Loading tenants...');
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/tenants`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        const result = await response.json();
+        if (result.success) {
+            renderTenantsTable(result.data);
+        } else {
+            showAlert('Failed to load tenants', 'error');
+        }
+    } catch (error) {
+        console.error('❌ Error loading tenants:', error);
+        showAlert('Failed to load tenants', 'error');
+    }
+}
+
+function renderTenantsTable(tenants) {
+    const tbody = document.querySelector('#tenantsTable tbody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    if (!tenants || tenants.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 20px;">No tenants found</td></tr>';
+        return;
+    }
+    
+    tenants.forEach(tenant => {
+        const row = document.createElement('tr');
+        const status = tenant.is_active ? '✓ Active' : '✗ Inactive';
+        row.innerHTML = `
+            <td style="padding: 8px;">${tenant.name}</td>
+            <td style="padding: 8px;">${status}</td>
+            <td style="padding: 8px;"><button onclick="alert('Edit tenant ${tenant.id}')">Edit</button> <button onclick="alert('Delete tenant ${tenant.id}')">Delete</button></td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+// ============================================================================
+// Users Page
+// ============================================================================
+
+async function loadUsers() {
+    console.log('👥 Loading users...');
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/users`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        const result = await response.json();
+        if (result.success) {
+            renderUsersTable(result.data);
+        } else {
+            showAlert('Failed to load users', 'error');
+        }
+    } catch (error) {
+        console.error('❌ Error loading users:', error);
+        showAlert('Failed to load users', 'error');
+    }
+}
+
+function renderUsersTable(users) {
+    const tbody = document.querySelector('#usersTable tbody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    if (!users || users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px;">No users found</td></tr>';
+        return;
+    }
+    
+    users.forEach(user => {
+        const row = document.createElement('tr');
+        const status = user.is_enabled ? '✓ Enabled' : '✗ Disabled';
+        const fullName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'N/A';
+        row.innerHTML = `
+            <td style="padding: 8px;">${user.phone_number}</td>
+            <td style="padding: 8px;">${user.email || 'N/A'}</td>
+            <td style="padding: 8px;">${fullName}</td>
+            <td style="padding: 8px;">${status}</td>
+            <td style="padding: 8px;"><button onclick="alert('Edit user ${user.id}')">Edit</button> <button onclick="alert('Delete user ${user.id}')">Delete</button></td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+// Placeholder functions
 async function loadAuditLogs() { console.log('📜 Loading audit logs...'); }
 async function loadSettings() { console.log('⚙️  Loading settings...'); }
 
