@@ -879,7 +879,58 @@
             }
         }
 
-        function openUserModal(userId = null) {
+        async function openUserModal(userId = null) {
+            const form = document.getElementById('userForm');
+            form.reset();
+            document.getElementById('userModalTitle').textContent = userId ? 'Edit User' : 'Add User';
+            document.getElementById('userId').value = userId || '';
+
+            // Show or hide Google Auth section
+            const googleAuthSection = document.getElementById('googleAuthSection');
+            if (userId) {
+                googleAuthSection.classList.remove('hidden');
+            } else {
+                googleAuthSection.classList.add('hidden');
+            }
+
+            // Fetch tenants for the dropdown
+            await populateTenantDropdown('userTenant');
+
+            if (userId) {
+                // Fetch existing user data
+                try {
+                    const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, { 
+                        headers: { 'Authorization': `Bearer ${sessionToken}` }
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        const user = result.data;
+                        document.getElementById('userTenant').value = user.tenant_id;
+                        document.getElementById('userPhone').value = user.phone_number;
+                        document.getElementById('userEmail').value = user.email;
+                        document.getElementById('userFirstName').value = user.first_name;
+                        document.getElementById('userLastName').value = user.last_name;
+                        document.getElementById('userStatus').value = user.is_enabled.toString();
+
+                        // Update Google Auth status
+                        const googleAuthStatus = document.getElementById('googleAuthStatus');
+                        if (user.google_token_base64) {
+                            googleAuthStatus.textContent = 'Authorized';
+                            googleAuthStatus.className = 'google-auth-status authorized';
+                        } else {
+                            googleAuthStatus.textContent = 'Not Authorized';
+                            googleAuthStatus.className = 'google-auth-status unauthorized';
+                        }
+                    } else {
+                        showAlert(result.message, 'error');
+                    }
+                } catch (error) {
+                    showAlert('Error fetching user data.', 'error');
+                }
+            }
+
+            showModal('userModal');
+        }
             document.getElementById('userId').value = userId || '';
             document.getElementById('userPhone').value = '';
             document.getElementById('userEmail').value = '';

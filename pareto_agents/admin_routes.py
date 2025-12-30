@@ -658,3 +658,47 @@ def google_oauth_callback():
         return "An error occurred during authentication.", 500
     finally:
         session.close()
+
+
+@admin_bp.route("/users/<int:user_id>", methods=["GET"])
+@require_auth
+def get_user(user_id):
+    """
+    Get a specific user
+    """
+    try:
+        session = get_db_session()
+        try:
+            user = session.query(User).filter_by(id=user_id).first()
+            if not user:
+                return jsonify({"success": False, "message": "User not found"}), 404
+            
+            user_data = {
+                "id": user.id,
+                "tenant_id": user.tenant_id,
+                "phone_number": user.phone_number,
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "is_enabled": user.is_enabled,
+                "google_token_base64": user.google_token_base64,
+            }
+            
+            logger.info(f"✅ Retrieved user {user_id}")
+            return jsonify({"success": True, "data": user_data}), 200
+        finally:
+            session.close()
+    except Exception as e:
+        logger.error(f"❌ Error getting user: {e}", exc_info=True)
+        return jsonify({"success": False, "message": "An error occurred while retrieving the user"}), 500
+
+
+@admin_bp.route("/users/<int:user_id>/authorize-google", methods=["POST"])
+@require_auth
+def authorize_google(user_id):
+    """
+    Initiate Google OAuth flow for a user
+    """
+    # This is a placeholder - the actual implementation will require the google-auth-oauthlib library
+    # and proper handling of the OAuth2 flow (redirects, state, etc.)
+    return jsonify({"success": True, "message": "Google authorization flow initiated."}), 200
