@@ -82,6 +82,15 @@ class AdminSession(Base):
     def __repr__(self):
         return f"<AdminSession(admin_id='{self.admin_id}', token='{self.session_token[:10]}...')>"
 
+class GoogleOauthCredentials(Base):
+    __tablename__ = 'google_oauth_credentials'
+    
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey('tenants.id'), nullable=False)
+    credentials_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
 class AuditLog(Base):
     administrator = relationship("Administrator", back_populates="audit_logs")
     """Database model for audit logging of administrative actions."""

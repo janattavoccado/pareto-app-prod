@@ -521,3 +521,140 @@ if __name__ == "__main__":
         level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
     logger.info("Admin routes module loaded successfully")
+
+
+# ============================================================================
+# Google OAuth Credentials Management
+# ============================================================================
+
+@admin_bp.route("/tenants/<int:tenant_id>/google-oauth-credentials", methods=["POST"])
+@require_auth
+def set_google_oauth_credentials(tenant_id):
+    """
+    Set Google OAuth credentials for a specific tenant.
+    """
+    data = request.get_json()
+    if not data or 'credentials_json' not in data:
+        return jsonify({"success": False, "message": "Missing credentials_json"}), 400
+
+    try:
+        session = get_db_session()
+        try:
+            # Check if tenant exists
+            tenant = session.query(Tenant).filter_by(id=tenant_id).first()
+            if not tenant:
+                return jsonify({"success": False, "message": "Tenant not found"}), 404
+
+            # Upsert credentials
+            creds = session.query(GoogleOauthCredentials).filter_by(tenant_id=tenant_id).first()
+            if creds:
+                creds.credentials_json = data['credentials_json']
+            else:
+                creds = GoogleOauthCredentials(
+                    tenant_id=tenant_id,
+                    credentials_json=data['credentials_json']
+                )
+                session.add(creds)
+            
+            session.commit()
+            logger.info(f"✅ Successfully set Google OAuth credentials for tenant {tenant_id}")
+            return jsonify({"success": True, "message": "Credentials saved successfully"}), 200
+        finally:
+            session.close()
+    except Exception as e:
+        logger.error(f"❌ Error setting Google OAuth credentials: {e}", exc_info=True)
+        return jsonify({"success": False, "message": "An error occurred"}), 500
+
+# ============================================================================
+# Google OAuth Flow
+# ============================================================================
+
+@admin_bp.route("/google-oauth/authorize/<int:user_id>", methods=["GET"])
+@require_auth
+def google_oauth_authorize(user_id):
+    """
+    Initiates the Google OAuth 2.0 flow for a user.
+    """
+    session = get_db_session()
+    try:
+        user = session.query(User).filter_by(id=user_id).first()
+        if not user or not user.tenant_id:
+            return jsonify({"success": False, "message": "User or tenant not found"}), 404
+
+        creds_record = session.query(GoogleOauthCredentials).filter_by(tenant_id=user.tenant_id).first()
+        if not creds_record or not creds_record.credentials_json:
+            return jsonify({"success": False, "message": "Google OAuth is not configured for this tenant"}), 400
+
+        client_config = json.loads(creds_record.credentials_json)
+
+        flow = Flow.from_client_config(
+            client_config,
+            scopes=[
+                'https://www.googleapis.com/auth/userinfo.email',
+                'https://www.googleapis.com/auth/calendar',
+                'https://www.googleapis.com/auth/gmail.readonly',
+                'openid'
+            ],
+            redirect_uri=request.host_url.rstrip('/') + '/api/admin/google-oauth/callback'
+        )
+
+        authorization_url, state = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true',
+            prompt='consent'
+        )
+
+        # Store state in session to prevent CSRF
+        # In a real app, you'd use a server-side session (e.g., Flask-Session)
+        # For simplicity, we'll just pass it back, but this is NOT secure.
+        # A better approach is to store the state with the user_id in the DB.
+        session.query(User).filter_by(id=user_id).update({"google_oauth_state": state})
+        session.commit()
+
+        return jsonify({"success": True, "authorization_url": authorization_url})
+
+    finally:
+        session.close()
+
+@admin_bp.route("/google-oauth/callback", methods=["GET"])
+def google_oauth_callback():
+    """
+    Handles the callback from Google after user authorization.
+    """
+    state = request.args.get('state')
+    code = request.args.get('code')
+
+    session = get_db_session()
+    try:
+        user = session.query(User).filter_by(google_oauth_state=state).first()
+        if not user:
+            return "Invalid state parameter. Authentication failed.", 400
+
+        creds_record = session.query(GoogleOauthCredentials).filter_by(tenant_id=user.tenant_id).first()
+        client_config = json.loads(creds_record.credentials_json)
+
+        flow = Flow.from_client_config(
+            client_config,
+            scopes=None, # Scopes are already defined in the authorization request
+            state=state,
+            redirect_uri=request.host_url.rstrip('/') + '/api/admin/google-oauth/callback'
+        )
+
+        flow.fetch_token(code=code)
+
+        credentials = flow.credentials
+        token_json = credentials.to_json()
+        
+        # Store the token in base64
+        user.google_token_base64 = base64.b64encode(token_json.encode('utf-8')).decode('utf-8')
+        user.google_oauth_state = None # Clear state
+        session.commit()
+
+        logger.info(f"✅ Successfully authorized Google account for user {user.id}")
+        return "<script>window.close();</script>" # Close the popup window
+
+    except Exception as e:
+        logger.error(f"❌ Google OAuth callback error: {e}", exc_info=True)
+        return "An error occurred during authentication.", 500
+    finally:
+        session.close()

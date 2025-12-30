@@ -444,6 +444,38 @@
 
                 <!-- Settings Page -->
                 <div id="settingsPage" class="page">
+                    <div class="page-header">
+                        <h2>Settings</h2>
+                    </div>
+                    <div class="table-container">
+                        <h3>Google OAuth Credentials</h3>
+                        <form id="googleOauthForm">
+                            <div class="form-group">
+                                <label for="tenantSelect">Tenant</label>
+                                <select id="tenantSelect" required></select>
+                            </div>
+                            <div class="form-group">
+                                <label for="googleCredsJson">client_secrets.json</label>
+                                <textarea id="googleCredsJson" rows="10" required></textarea>
+                            </div>
+                            <button type="submit" class="button">Save Credentials</button>
+                        </form>
+                    </div>
+                </div>
+                    <div class="table-container" style="margin-top: 30px;">
+                        <h3>Authorize User for Google API Access</h3>
+                        <form id="googleUserAuthForm">
+                            <div class="form-group">
+                                <label for="userSelect">User</label>
+                                <select id="userSelect" required></select>
+                            </div>
+                            <button type="submit" class="button">Authorize with Google</button>
+                        </form>
+                    </div>
+                </div>
+                </div>
+
+                <div id="settingsPage" class="page">
                     <h2>Settings</h2>
                     <p style="text-align: center; color: #999; margin-top: 50px;">Settings feature coming soon...</p>
                 </div>
@@ -591,6 +623,12 @@
                     if (modal) modal.classList.remove('active');
                 });
             });
+
+            // Google OAuth form submissions
+            const googleOauthForm = document.getElementById('googleOauthForm');
+            const googleUserAuthForm = document.getElementById('googleUserAuthForm');
+            if (googleOauthForm) googleOauthForm.addEventListener('submit', handleGoogleOauthFormSubmit);
+            if (googleUserAuthForm) googleUserAuthForm.addEventListener('submit', handleGoogleUserAuthFormSubmit);
 
             // Close modal when clicking outside
             window.addEventListener('click', (e) => {
@@ -1079,6 +1117,88 @@
 
         function showLoginModal() {
             document.getElementById('loginModal').classList.add('active');
+        }
+    </script>
+</body>
+</html>
+
+
+        // ============================================================================
+        // Google OAuth
+        // ============================================================================
+        async function handleGoogleOauthFormSubmit(e) {
+            e.preventDefault();
+            const tenantId = document.getElementById("tenantSelect").value;
+            const credentialsJson = document.getElementById("googleCredsJson").value;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/admin/tenants/${tenantId}/google-oauth-credentials`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${sessionToken}`
+                    },
+                    body: JSON.stringify({ credentials_json: credentialsJson })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showAlert('Google OAuth credentials saved successfully!', 'success');
+                } else {
+                    showAlert(data.message || 'Failed to save credentials', 'error');
+                }
+            } catch (error) {
+                showAlert('An error occurred while saving credentials.', 'error');
+            }
+        }
+
+        async function handleGoogleUserAuthFormSubmit(e) {
+            e.preventDefault();
+            const userId = document.getElementById("userSelect").value;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/admin/google-oauth/authorize/${userId}`, {
+                    headers: { 'Authorization': `Bearer ${sessionToken}` }
+                });
+                const data = await response.json();
+                if (data.success && data.authorization_url) {
+                    // Open a popup for Google authentication
+                    const authWindow = window.open(data.authorization_url, 'GoogleAuth', 'width=600,height=700');
+                    // You might want to add a listener to check when the window is closed
+                    // and then refresh the user's status.
+                } else {
+                    showAlert(data.message || 'Failed to start authorization', 'error');
+                }
+            } catch (error) {
+                showAlert('An error occurred while starting authorization.', 'error');
+            }
+        }
+
+        async function populateTenantAndUserSelects() {
+            try {
+                const [tenantsRes, usersRes] = await Promise.all([
+                    fetch(`${API_BASE_URL}/admin/tenants`, { headers: { 'Authorization': `Bearer ${sessionToken}` } }),
+                    fetch(`${API_BASE_URL}/admin/users`, { headers: { 'Authorization': `Bearer ${sessionToken}` } })
+                ]);
+
+                const tenantsData = await tenantsRes.json();
+                const usersData = await usersRes.json();
+
+                const tenantSelect = document.getElementById('tenantSelect');
+                const userSelect = document.getElementById('userSelect');
+                const userTenantSelect = document.getElementById('userTenant');
+
+                if (tenantsData.success) {
+                    tenantSelect.innerHTML = tenantsData.data.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+                    userTenantSelect.innerHTML = '<option value="">-- Select Tenant --</option>' + tenantsData.data.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+                }
+
+                if (usersData.success) {
+                    userSelect.innerHTML = usersData.data.map(u => `<option value="${u.id}">${u.first_name} ${u.last_name} (${u.email})</option>`).join('');
+                }
+
+            } catch (error) {
+                console.error('Failed to populate select dropdowns', error);
+            }
         }
     </script>
 </body>
