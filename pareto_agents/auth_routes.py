@@ -1,5 +1,4 @@
-
-"""
+'''
 Authentication API Routes
 
 Provides Flask endpoints for:
@@ -9,7 +8,7 @@ Provides Flask endpoints for:
 - Password change
 
 File location: pareto_agents/auth_routes.py
-"""
+'''
 
 import logging
 from flask import Blueprint, request, jsonify, make_response
@@ -28,29 +27,10 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 # ============================================================================
 
 
-@auth_bp.route("/login", methods=["POST"])
+@auth_bp.route("/login", methods=['POST'])
 def login():
     """
     Administrator login endpoint
-
-    Request body:
-    {
-        "username": "admin",
-        "password": "password123"
-    }
-
-    Response:
-    {
-        "success": true,
-        "message": "Login successful",
-        "session_token": "...",
-        "admin": {
-            "id": 1,
-            "username": "admin",
-            "email": "admin@example.com",
-            "full_name": "Administrator"
-        }
-    }
     """
     try:
         data = request.get_json()
@@ -137,20 +117,11 @@ def login():
         )
 
 
-@auth_bp.route("/logout", methods=["POST"])
+@auth_bp.route("/logout", methods=['POST'])
 @require_auth
 def logout():
     """
     Administrator logout endpoint
-
-    Headers:
-    Authorization: Bearer <session_token>
-
-    Response:
-    {
-        "success": true,
-        "message": "Logout successful"
-    }
     """
     try:
         session_token = request.session_token
@@ -172,31 +143,20 @@ def logout():
         )
 
 
-@auth_bp.route("/validate", methods=["GET"])
+@auth_bp.route("/validate", methods=['GET'])
 @require_auth
 def validate_session():
     """
     Validate current session
-
-    Headers:
-    Authorization: Bearer <session_token>
-
-    Response:
-    {
-        "success": true,
-        "admin": {
-            "id": 1,
-            "username": "admin",
-            "email": "admin@example.com",
-            "full_name": "Administrator",
-            "expires_at": "2025-12-27T02:30:00"
-        }
-    }
     """
     try:
         admin_info = request.admin_info
+        
+        # Ensure admin_id is included for compatibility with other routes
+        if "admin_id" not in admin_info and "id" in admin_info:
+            admin_info["admin_id"] = admin_info["id"]
 
-        logger.info(f"✅ Session validated for {admin_info["username"]}")
+        logger.info(f"✅ Session validated for {admin_info.get('username')}")
         return jsonify({"success": True, "admin": admin_info}), 200
 
     except Exception as e:
@@ -209,26 +169,11 @@ def validate_session():
         )
 
 
-@auth_bp.route("/change-password", methods=["POST"])
+@auth_bp.route("/change-password", methods=['POST'])
 @require_auth
 def change_password():
     """
     Change administrator password
-
-    Headers:
-    Authorization: Bearer <session_token>
-
-    Request body:
-    {
-        "old_password": "current_password",
-        "new_password": "new_password123"
-    }
-
-    Response:
-    {
-        "success": true,
-        "message": "Password changed successfully"
-    }
     """
     try:
         admin_info = request.admin_info
@@ -254,14 +199,19 @@ def change_password():
             )
 
         # Change password
+        # Use .get() to safely access admin_id or id
+        admin_id = admin_info.get("admin_id") or admin_info.get("id")
+        if not admin_id:
+            return jsonify({"success": False, "message": "Admin ID not found in session"}), 400
+
         success, message = AuthenticationService.change_password(
-            admin_id=admin_info["admin_id"],
+            admin_id=admin_id,
             old_password=old_password,
             new_password=new_password,
         )
 
         if success:
-            logger.info(f"✅ Password changed for {admin_info["username"]}")
+            logger.info(f"✅ Password changed for {admin_info.get('username')}")
             return jsonify({"success": True, "message": message}), 200
         else:
             logger.warning(f"❌ Password change failed: {message}")
@@ -277,16 +227,10 @@ def change_password():
 # ============================================================================
 
 
-@auth_bp.route("/health", methods=["GET"])
+@auth_bp.route("/health", methods=['GET'])
 def auth_health():
     """
     Health check endpoint for authentication service
-
-    Response:
-    {
-        "status": "healthy",
-        "service": "Authentication API"
-    }
     """
     return (
         jsonify({"status": "healthy", "service": "Authentication API"}),
