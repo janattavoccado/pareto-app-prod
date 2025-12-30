@@ -75,6 +75,8 @@ class AuditLog(Base):
     admin_id = Column(Integer, ForeignKey('administrators.id'), nullable=True)
     action = Column(String, nullable=False)
     details = Column(Text)
+    ip_address = Column(String) # Added missing column
+    user_agent = Column(String) # Added missing column
     
     def __repr__(self):
         return f"<AuditLog(action='{self.action}', timestamp='{self.timestamp}')>"
