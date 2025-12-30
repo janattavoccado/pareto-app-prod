@@ -2,6 +2,10 @@ flask
 gunicorn
 pydantic
 pydantic[email]
+# Database
+SQLAlchemy
+psycopg2-binary # PostgreSQL adapter for Heroku
+# Note: SQLite is built-in, no separate package needed
 google-auth-oauthlib
 google-auth-httplib2
 google-api-python-client
