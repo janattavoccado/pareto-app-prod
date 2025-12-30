@@ -51,7 +51,7 @@ class Administrator(Base):
     password_hash = Column(String, nullable=False)
     email = Column(String) # Added missing column from log error
     is_active = Column(Boolean, default=True)
-    last_login = Column(DateTime) # Added missing column from log error
+    last_login_at = Column(DateTime) # Corrected column name from log error
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     
