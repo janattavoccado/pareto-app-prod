@@ -49,6 +49,7 @@ class Administrator(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=False)
+    email = Column(String) # Added missing column from log error
     is_active = Column(Boolean, default=True)
     last_login = Column(DateTime) # Added missing column from log error
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
