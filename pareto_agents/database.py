@@ -61,6 +61,7 @@ class AdminSession(Base):
     expires_at = Column(DateTime, nullable=False)
     ip_address = Column(String) # Added missing column
     user_agent = Column(String) # Added missing column
+    is_active = Column(Boolean, default=True) # Added missing column from log error
     
     def __repr__(self):
         return f"<AdminSession(admin_id='{self.admin_id}', token='{self.session_token[:10]}...')>"
@@ -95,12 +96,8 @@ def init_db():
     Base.metadata.create_all(bind=engine)
 
 def get_db_session():
-    """Dependency to get a database session."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    """Returns a direct database session."""
+    return SessionLocal()
 
 # Compatibility function for app.py
 def get_db_manager():
