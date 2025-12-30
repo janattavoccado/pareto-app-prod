@@ -45,6 +45,22 @@ function setupEventListeners() {
     document.querySelectorAll('.sidebar-item').forEach(item => {
         item.addEventListener('click', () => navigateToPage(item.dataset.page));
     });
+
+    // Modal buttons
+    document.getElementById('addTenantBtn').addEventListener('click', () => openTenantModal());
+    document.getElementById('addUserBtn').addEventListener('click', () => openUserModal());
+    document.getElementById('tenantForm').addEventListener('submit', handleTenantFormSubmit);
+    document.getElementById('userForm').addEventListener('submit', handleUserFormSubmit);
+
+    // Close modal buttons
+    document.querySelectorAll('.close-button').forEach(btn => {
+        btn.addEventListener('click', () => {
+            closeModal('tenantModal');
+            closeModal('userModal');
+        });
+    });
+        item.addEventListener('click', () => navigateToPage(item.dataset.page));
+    });
 }
 
 // ============================================================================
@@ -442,5 +458,129 @@ function renderUsersTable(users) {
 // Placeholder functions
 async function loadAuditLogs() { console.log('📜 Loading audit logs...'); }
 async function loadSettings() { console.log('⚙️  Loading settings...'); }
+
+// ============================================================================
+// Modal and Form Handling
+// ============================================================================
+
+function openTenantModal(tenant = null) {
+    const modal = document.getElementById('tenantModal');
+    const title = document.getElementById('tenantModalTitle');
+    const form = document.getElementById('tenantForm');
+    
+    form.reset();
+    document.getElementById('tenantId').value = '';
+    
+    if (tenant) {
+        title.textContent = 'Edit Tenant';
+        document.getElementById('tenantId').value = tenant.id;
+        document.getElementById('tenantName').value = tenant.name;
+        document.getElementById('tenantStatus').value = tenant.is_active.toString();
+    } else {
+        title.textContent = 'Add Tenant';
+    }
+    
+    modal.style.display = 'block';
+}
+
+function openUserModal(user = null) {
+    const modal = document.getElementById('userModal');
+    const title = document.getElementById('userModalTitle');
+    const form = document.getElementById('userForm');
+    
+    form.reset();
+    document.getElementById('userId').value = '';
+    
+    if (user) {
+        title.textContent = 'Edit User';
+        document.getElementById('userId').value = user.id;
+        document.getElementById('userTenant').value = user.tenant_id;
+        document.getElementById('userPhone').value = user.phone_number;
+        document.getElementById('userEmail').value = user.email;
+        document.getElementById('userFirstName').value = user.first_name;
+        document.getElementById('userLastName').value = user.last_name;
+        document.getElementById('userStatus').value = user.is_enabled.toString();
+    } else {
+        title.textContent = 'Add User';
+    }
+    
+    modal.style.display = 'block';
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).style.display = 'none';
+}
+
+async function handleTenantFormSubmit(e) {
+    e.preventDefault();
+    const id = document.getElementById('tenantId').value;
+    const name = document.getElementById('tenantName').value;
+    const is_active = document.getElementById('tenantStatus').value === 'true';
+    
+    const url = id ? `${API_BASE_URL}/admin/tenants/${id}` : `${API_BASE_URL}/admin/tenants`;
+    const method = id ? 'PUT' : 'POST';
+    
+    try {
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionToken}`
+            },
+            body: JSON.stringify({ name, is_active })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            showAlert(`Tenant ${id ? 'updated' : 'created'} successfully!`, 'success');
+            closeModal('tenantModal');
+            loadTenants();
+        } else {
+            showAlert(result.message || 'Failed to save tenant', 'error');
+        }
+    } catch (error) {
+        console.error('❌ Error saving tenant:', error);
+        showAlert('An error occurred while saving the tenant', 'error');
+    }
+}
+
+async function handleUserFormSubmit(e) {
+    e.preventDefault();
+    const id = document.getElementById('userId').value;
+    const tenant_id = document.getElementById('userTenant').value;
+    const phone_number = document.getElementById('userPhone').value;
+    const email = document.getElementById('userEmail').value;
+    const first_name = document.getElementById('userFirstName').value;
+    const last_name = document.getElementById('userLastName').value;
+    const is_enabled = document.getElementById('userStatus').value === 'true';
+    
+    const url = id ? `${API_BASE_URL}/admin/users/${id}` : `${API_BASE_URL}/admin/users`;
+    const method = id ? 'PUT' : 'POST';
+    
+    const payload = { tenant_id, phone_number, email, first_name, last_name, is_enabled };
+    
+    try {
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionToken}`
+            },
+            body: JSON.stringify(payload)
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            showAlert(`User ${id ? 'updated' : 'created'} successfully!`, 'success');
+            closeModal('userModal');
+            loadUsers();
+        } else {
+            showAlert(result.message || 'Failed to save user', 'error');
+        }
+    } catch (error) {
+        console.error('❌ Error saving user:', error);
+        showAlert('An error occurred while saving the user', 'error');
+    }
+}
 
 console.log('✅ Admin Dashboard script loaded');

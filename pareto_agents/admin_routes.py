@@ -342,6 +342,167 @@ def get_user(user_id):
         }), 500
 
 
+@admin_bp.route("/tenants", methods=["POST"])
+@require_auth
+def create_tenant():
+    try:
+        session = get_db_session()
+        data = request.get_json()
+        
+        if not data or not data.get("name"):
+            return jsonify({"success": False, "message": "Tenant name is required"}), 400
+        
+        new_tenant = Tenant(name=data["name"], is_active=data.get("is_active", True))
+        session.add(new_tenant)
+        session.commit()
+        
+        logger.info(f"✅ Created new tenant: {new_tenant.name}")
+        return jsonify({"success": True, "message": "Tenant created successfully", "data": {"id": new_tenant.id}}), 201
+        
+    except Exception as e:
+        logger.error(f"❌ Error creating tenant: {e}", exc_info=True)
+        session.rollback()
+        return jsonify({"success": False, "message": "An error occurred while creating the tenant"}), 500
+    finally:
+        session.close()
+
+@admin_bp.route("/tenants/<int:tenant_id>", methods=["PUT"])
+@require_auth
+def update_tenant(tenant_id):
+    try:
+        session = get_db_session()
+        data = request.get_json()
+        tenant = session.query(Tenant).filter_by(id=tenant_id).first()
+        
+        if not tenant:
+            return jsonify({"success": False, "message": "Tenant not found"}), 404
+        
+        if "name" in data:
+            tenant.name = data["name"]
+        if "is_active" in data:
+            tenant.is_active = data["is_active"]
+            
+        session.commit()
+        logger.info(f"✅ Updated tenant {tenant_id}")
+        return jsonify({"success": True, "message": "Tenant updated successfully"}), 200
+        
+    except Exception as e:
+        logger.error(f"❌ Error updating tenant: {e}", exc_info=True)
+        session.rollback()
+        return jsonify({"success": False, "message": "An error occurred while updating the tenant"}), 500
+    finally:
+        session.close()
+
+@admin_bp.route("/tenants/<int:tenant_id>", methods=["DELETE"])
+@require_auth
+def delete_tenant(tenant_id):
+    try:
+        session = get_db_session()
+        tenant = session.query(Tenant).filter_by(id=tenant_id).first()
+        
+        if not tenant:
+            return jsonify({"success": False, "message": "Tenant not found"}), 404
+        
+        session.delete(tenant)
+        session.commit()
+        logger.info(f"✅ Deleted tenant {tenant_id}")
+        return jsonify({"success": True, "message": "Tenant deleted successfully"}), 200
+        
+    except Exception as e:
+        logger.error(f"❌ Error deleting tenant: {e}", exc_info=True)
+        session.rollback()
+        return jsonify({"success": False, "message": "An error occurred while deleting the tenant"}), 500
+    finally:
+        session.close()
+
+@admin_bp.route("/users", methods=["POST"])
+@require_auth
+def create_user():
+    try:
+        session = get_db_session()
+        data = request.get_json()
+        
+        if not data or not data.get("phone_number"):
+            return jsonify({"success": False, "message": "Phone number is required"}), 400
+        
+        new_user = User(
+            tenant_id=data.get("tenant_id"),
+            phone_number=data["phone_number"],
+            email=data.get("email"),
+            first_name=data.get("first_name"),
+            last_name=data.get("last_name"),
+            is_enabled=data.get("is_enabled", True)
+        )
+        session.add(new_user)
+        session.commit()
+        
+        logger.info(f"✅ Created new user: {new_user.phone_number}")
+        return jsonify({"success": True, "message": "User created successfully", "data": {"id": new_user.id}}), 201
+        
+    except Exception as e:
+        logger.error(f"❌ Error creating user: {e}", exc_info=True)
+        session.rollback()
+        return jsonify({"success": False, "message": "An error occurred while creating the user"}), 500
+    finally:
+        session.close()
+
+@admin_bp.route("/users/<int:user_id>", methods=["PUT"])
+@require_auth
+def update_user(user_id):
+    try:
+        session = get_db_session()
+        data = request.get_json()
+        user = session.query(User).filter_by(id=user_id).first()
+        
+        if not user:
+            return jsonify({"success": False, "message": "User not found"}), 404
+        
+        if "tenant_id" in data:
+            user.tenant_id = data["tenant_id"]
+        if "phone_number" in data:
+            user.phone_number = data["phone_number"]
+        if "email" in data:
+            user.email = data["email"]
+        if "first_name" in data:
+            user.first_name = data["first_name"]
+        if "last_name" in data:
+            user.last_name = data["last_name"]
+        if "is_enabled" in data:
+            user.is_enabled = data["is_enabled"]
+            
+        session.commit()
+        logger.info(f"✅ Updated user {user_id}")
+        return jsonify({"success": True, "message": "User updated successfully"}), 200
+        
+    except Exception as e:
+        logger.error(f"❌ Error updating user: {e}", exc_info=True)
+        session.rollback()
+        return jsonify({"success": False, "message": "An error occurred while updating the user"}), 500
+    finally:
+        session.close()
+
+@admin_bp.route("/users/<int:user_id>", methods=["DELETE"])
+@require_auth
+def delete_user(user_id):
+    try:
+        session = get_db_session()
+        user = session.query(User).filter_by(id=user_id).first()
+        
+        if not user:
+            return jsonify({"success": False, "message": "User not found"}), 404
+        
+        session.delete(user)
+        session.commit()
+        logger.info(f"✅ Deleted user {user_id}")
+        return jsonify({"success": True, "message": "User deleted successfully"}), 200
+        
+    except Exception as e:
+        logger.error(f"❌ Error deleting user: {e}", exc_info=True)
+        session.rollback()
+        return jsonify({"success": False, "message": "An error occurred while deleting the user"}), 500
+    finally:
+        session.close()
+
 # ============================================================================
 # Health Check Route
 # ============================================================================
