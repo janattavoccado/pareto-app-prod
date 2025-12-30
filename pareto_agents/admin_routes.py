@@ -34,27 +34,43 @@ def dashboard():
         
         try:
             # Get tenant count - handle missing columns gracefully
+            tenant_count = 0
             try:
                 tenant_count = session.query(Tenant).filter_by(is_active=True).count()
             except Exception as e:
                 logger.warning(f"⚠️  Error getting tenant count: {e}")
-                tenant_count = 0
+                # Try without filter
+                try:
+                    tenant_count = session.query(Tenant).count()
+                except:
+                    pass
             
             # Get user count - handle missing columns gracefully
+            user_count = 0
             try:
                 user_count = session.query(User).filter_by(is_enabled=True).count()
             except Exception as e:
                 logger.warning(f"⚠️  Error getting user count: {e}")
-                user_count = 0
+                # Try without filter
+                try:
+                    user_count = session.query(User).count()
+                except:
+                    pass
             
             # Get admin count
+            admin_count = 0
             try:
                 admin_count = session.query(Administrator).filter_by(is_active=True).count()
             except Exception as e:
                 logger.warning(f"⚠️  Error getting admin count: {e}")
-                admin_count = 0
+                # Try without filter
+                try:
+                    admin_count = session.query(Administrator).count()
+                except:
+                    pass
             
             # Get recent tenants
+            tenants_data = []
             try:
                 recent_tenants = session.query(Tenant).filter_by(is_active=True).limit(5).all()
                 tenants_data = [
@@ -69,9 +85,24 @@ def dashboard():
                 ]
             except Exception as e:
                 logger.warning(f"⚠️  Error getting recent tenants: {e}")
-                tenants_data = []
+                # Try without filter
+                try:
+                    recent_tenants = session.query(Tenant).limit(5).all()
+                    tenants_data = [
+                        {
+                            "id": t.id,
+                            "name": t.name,
+                            "is_active": t.is_active,
+                            "created_at": None,
+                            "updated_at": None,
+                        }
+                        for t in recent_tenants
+                    ]
+                except:
+                    tenants_data = []
             
             # Get recent users
+            users_data = []
             try:
                 recent_users = session.query(User).filter_by(is_enabled=True).limit(5).all()
                 users_data = [
@@ -88,7 +119,23 @@ def dashboard():
                 ]
             except Exception as e:
                 logger.warning(f"⚠️  Error getting recent users: {e}")
-                users_data = []
+                # Try without filter
+                try:
+                    recent_users = session.query(User).limit(5).all()
+                    users_data = [
+                        {
+                            "id": u.id,
+                            "phone_number": u.phone_number,
+                            "email": u.email,
+                            "first_name": u.first_name,
+                            "last_name": u.last_name,
+                            "is_enabled": u.is_enabled,
+                            "created_at": None,
+                        }
+                        for u in recent_users
+                    ]
+                except:
+                    users_data = []
             
             logger.info("✅ Dashboard data retrieved successfully")
             
