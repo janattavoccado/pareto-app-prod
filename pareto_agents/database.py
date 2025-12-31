@@ -1,140 +1,340 @@
+"""
+Database Models and Configuration
+
+Provides SQLAlchemy ORM models for:
+- Administrators
+- Tenants
+- Users
+- Admin Sessions
+- Audit Logs
+
+File location: pareto_agents/database.py
+"""
+
 import os
-import datetime
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Text, ForeignKey
-from sqlalchemy.orm import sessionmaker, relationship
+import logging
+from datetime import datetime, timedelta
+from typing import Optional, Dict, Any
+from pathlib import Path
+
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Text, ForeignKey, UniqueConstraint, Index
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, relationship, Session
+from sqlalchemy.pool import StaticPool
 
-# --- Database Configuration ---
-# Heroku sets DATABASE_URL for PostgreSQL. If not set, use local SQLite.
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///pareto.db")
+logger = logging.getLogger(__name__)
 
-# SQLAlchemy setup
+# Create base class for models
 Base = declarative_base()
 
-class Tenant(Base):
-    """Database model for application tenants (organizations)."""
-    __tablename__ = 'tenants'
-    
-    id = Column(Integer, primary_key=True)
-    name = Column(String, unique=True, nullable=False)
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
-    
-    def __repr__(self):
-        return f"<Tenant(name='{self.name}')>"
 
-class User(Base):
-    """Database model for user information and Google tokens."""
-    __tablename__ = 'users'
-    
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(Integer, ForeignKey('tenants.id'), nullable=True) # Added foreign key
-    phone_number = Column(String, unique=True, nullable=False)
-    first_name = Column(String)
-    last_name = Column(String)
-    email = Column(String)
-    is_enabled = Column(Boolean, default=False)
-    google_token_base64 = Column(String) # Stores the base64 encoded Google token
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
-    
-    def __repr__(self):
-        return f"<User(phone_number='{self.phone_number}', email='{self.email}')>"
+# ============================================================================
+# Database Models
+# ============================================================================
 
 class Administrator(Base):
-    sessions = relationship("AdminSession", back_populates="administrator")
-    audit_logs = relationship("AuditLog", back_populates="administrator")
-    """Database model for application administrators."""
+    """Administrator account model"""
     __tablename__ = 'administrators'
     
     id = Column(Integer, primary_key=True)
-    username = Column(String, unique=True, nullable=False)
-    password_hash = Column(String, nullable=False)
-    email = Column(String)
-    full_name = Column(String) # Added missing column from auth_routes.py
+    username = Column(String(255), unique=True, nullable=False)
+    email = Column(String(255), unique=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    full_name = Column(String(255))
     is_active = Column(Boolean, default=True)
-    last_login_at = Column(DateTime) # Corrected column name from log error
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_login = Column(DateTime)
+    
+    # Relationships
+    sessions = relationship('AdminSession', back_populates='administrator', cascade='all, delete-orphan')
+    audit_logs = relationship('AuditLog', back_populates='administrator', cascade='all, delete-orphan')
+    tenants = relationship('Tenant', back_populates='created_by_admin', cascade='all, delete-orphan')
     
     def __repr__(self):
-        return f"<Administrator(username='{self.username}')>"
+        return f"<Administrator(id={self.id}, username={self.username}, email={self.email})>"
+
+
+class Tenant(Base):
+    """Tenant (Company) model"""
+    __tablename__ = 'tenants'
+    
+    id = Column(Integer, primary_key=True)
+    company_name = Column(String(255), nullable=False)
+    company_slug = Column(String(255), unique=True, nullable=False)
+    email = Column(String(255))
+    phone = Column(String(20))
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by_admin_id = Column(Integer, ForeignKey('administrators.id'), nullable=False)
+    
+    # Relationships
+    created_by_admin = relationship('Administrator', back_populates='tenants')
+    users = relationship('User', back_populates='tenant', cascade='all, delete-orphan')
+    
+    __table_args__ = (
+        Index('idx_tenants_slug', 'company_slug'),
+    )
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'company_name': self.company_name,
+            'company_slug': self.company_slug,
+            'email': self.email,
+            'phone': self.phone,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+    def __repr__(self):
+        return f"<Tenant(id={self.id}, company_name={self.company_name}, slug={self.company_slug})>"
+
+
+class User(Base):
+    """User (Team member) model"""
+    __tablename__ = 'users'
+    
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey('tenants.id'), nullable=False)
+    phone_number = Column(String(20), nullable=False)
+    first_name = Column(String(255), nullable=False)
+    last_name = Column(String(255), nullable=False)
+    email = Column(String(255))
+    is_enabled = Column(Boolean, default=True)
+    # Google token stored as Base64 encrypted string (replaces file-based tokens)
+    google_token_base64 = Column(Text, nullable=True)
+    google_token_updated_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    tenant = relationship('Tenant', back_populates='users')
+    
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'phone_number', name='uq_tenant_phone'),
+        Index('idx_users_tenant_id', 'tenant_id'),
+        Index('idx_users_phone', 'phone_number'),
+        Index('idx_users_tenant_phone', 'tenant_id', 'phone_number'),
+    )
+    
+    @property
+    def full_name(self) -> str:
+        """Get user's full name"""
+        return f"{self.first_name} {self.last_name}".strip()
+    
+    def has_google_token(self) -> bool:
+        """Check if user has a Google token configured"""
+        return bool(self.google_token_base64)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'tenant_id': self.tenant_id,
+            'phone_number': self.phone_number,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'email': self.email,
+            'is_enabled': self.is_enabled,
+            'has_google_token': self.has_google_token(),
+            'google_token_updated_at': self.google_token_updated_at.isoformat() if self.google_token_updated_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+    def __repr__(self):
+        return f"<User(id={self.id}, phone={self.phone_number}, name={self.full_name})>"
+
 
 class AdminSession(Base):
-    administrator = relationship("Administrator", back_populates="sessions")
-    """Database model for administrator sessions."""
+    """Administrator session model"""
     __tablename__ = 'admin_sessions'
     
     id = Column(Integer, primary_key=True)
     admin_id = Column(Integer, ForeignKey('administrators.id'), nullable=False)
-    session_token = Column(String, unique=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    session_token = Column(String(500), unique=True, nullable=False)
+    ip_address = Column(String(45))
+    user_agent = Column(String(500))
+    created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False)
-    ip_address = Column(String) # Added missing column
-    user_agent = Column(String) # Added missing column
-    is_active = Column(Boolean, default=True) # Added missing column from log error
+    
+    # Relationships
+    administrator = relationship('Administrator', back_populates='sessions')
+    
+    __table_args__ = (
+        Index('idx_admin_sessions_admin_id', 'admin_id'),
+        Index('idx_admin_sessions_token', 'session_token'),
+    )
     
     @property
-    def is_expired(self):
-        return datetime.datetime.utcnow() > self.expires_at
-
-    def __repr__(self):
-        return f"<AdminSession(admin_id='{self.admin_id}', token='{self.session_token[:10]}...')>"
-
-class GoogleOauthCredentials(Base):
-    __tablename__ = 'google_oauth_credentials'
+    def is_expired(self) -> bool:
+        """Check if session is expired"""
+        return datetime.utcnow() > self.expires_at
     
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(Integer, ForeignKey('tenants.id'), nullable=False)
-    credentials_json = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    def __repr__(self):
+        return f"<AdminSession(id={self.id}, admin_id={self.admin_id}, expired={self.is_expired})>"
+
 
 class AuditLog(Base):
-    administrator = relationship("Administrator", back_populates="audit_logs")
-    """Database model for audit logging of administrative actions."""
+    """Audit log model for tracking administrative actions"""
     __tablename__ = 'audit_logs'
     
     id = Column(Integer, primary_key=True)
-    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
-    admin_id = Column(Integer, ForeignKey('administrators.id'), nullable=True)
-    action = Column(String, nullable=False)
-    details = Column(Text)
-    ip_address = Column(String) # Added missing column
-    user_agent = Column(String) # Added missing column
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    admin_id = Column(Integer, ForeignKey('administrators.id'))
+    action = Column(String(255), nullable=False)
+    entity_type = Column(String(100))
+    entity_id = Column(Integer)
+    changes = Column(Text)  # JSON string of changes
+    ip_address = Column(String(45))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    administrator = relationship('Administrator', back_populates='audit_logs')
+    
+    __table_args__ = (
+        Index('idx_audit_logs_admin_id', 'admin_id'),
+        Index('idx_audit_logs_created_at', 'created_at'),
+    )
     
     def __repr__(self):
-        return f"<AuditLog(action='{self.action}', timestamp='{self.timestamp}')>"
+        return f"<AuditLog(id={self.id}, action={self.action}, entity={self.entity_type}:{self.entity_id})>"
 
-# Configure engine for Heroku PostgreSQL or local SQLite
-if DATABASE_URL.startswith("postgres://"):
-    # Fix for Heroku's old postgres URL scheme
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-    # Heroku requires SSL mode for external connections, but we'll rely on Heroku's default config
-    engine = create_engine(DATABASE_URL)
-else:
-    # SQLite - check_same_thread is required for Flask development
-    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# ============================================================================
+# Database Connection and Session Management
+# ============================================================================
 
-def init_db():
-    """Initializes the database and creates tables if they don't exist."""
-    Base.metadata.create_all(bind=engine)
+class DatabaseManager:
+    """Manages database connection and session lifecycle"""
+    
+    def __init__(self, database_url: Optional[str] = None):
+        """
+        Initialize database manager
+        
+        Args:
+            database_url: SQLAlchemy database URL. If None, uses default SQLite path.
+        """
+        if database_url is None:
+            # Default to SQLite in configurations directory
+            db_dir = Path('configurations')
+            db_dir.mkdir(exist_ok=True)
+            database_url = f'sqlite:///{db_dir}/pareto.db'
+        
+        self.database_url = database_url
+        logger.info(f"Initializing database: {database_url}")
+        
+        # Create engine
+        if database_url.startswith('sqlite://'):
+            # SQLite specific configuration
+            self.engine = create_engine(
+                database_url,
+                connect_args={'check_same_thread': False},
+                poolclass=StaticPool
+            )
+        else:
+            # For other databases (PostgreSQL, MySQL, etc.)
+            self.engine = create_engine(database_url, echo=False)
+        
+        # Create session factory
+        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+        
+        # Create tables
+        self._create_tables()
+    
+    def _create_tables(self):
+        """Create all tables in the database"""
+        try:
+            Base.metadata.create_all(self.engine)
+            logger.info("✅ Database tables created successfully")
+        except Exception as e:
+            logger.error(f"❌ Error creating database tables: {e}")
+            raise
+    
+    def get_session(self) -> Session:
+        """Get a new database session"""
+        return self.SessionLocal()
+    
+    def close(self):
+        """Close database connection"""
+        self.engine.dispose()
+        logger.info("Database connection closed")
 
-def get_db_session():
-    """Returns a direct database session."""
-    return SessionLocal()
 
-# Compatibility function for app.py
-def get_db_manager():
+# ============================================================================
+# Global Database Manager Instance
+# ============================================================================
+
+_db_manager: Optional[DatabaseManager] = None
+
+
+def get_db_manager(database_url: Optional[str] = None) -> DatabaseManager:
     """
-    Compatibility function for app.py. Returns a new database session.
-    The caller is responsible for closing the session.
+    Get or create the global database manager instance
+    
+    Args:
+        database_url: SQLAlchemy database URL (used only on first call)
+        
+    Returns:
+        DatabaseManager instance
     """
-    return SessionLocal()
+    global _db_manager
+    if _db_manager is None:
+        _db_manager = DatabaseManager(database_url)
+    return _db_manager
 
-# Initialize the database when this module is imported
-init_db()
+
+def get_db_session() -> Session:
+    """
+    Get a new database session
+    
+    Usage in Flask:
+        @app.route('/example')
+        def example():
+            db = get_db_session()
+            try:
+                # Use db session
+                pass
+            finally:
+                db.close()
+    
+    Returns:
+        SQLAlchemy Session
+    """
+    return get_db_manager().get_session()
+
+
+# ============================================================================
+# Database Utilities
+# ============================================================================
+
+def reset_database(database_url: Optional[str] = None):
+    """
+    Reset database - drops all tables and recreates them
+    WARNING: This will delete all data!
+    
+    Args:
+        database_url: SQLAlchemy database URL
+    """
+    manager = DatabaseManager(database_url)
+    logger.warning("⚠️  RESETTING DATABASE - ALL DATA WILL BE DELETED!")
+    Base.metadata.drop_all(manager.engine)
+    manager._create_tables()
+    logger.warning("✅ Database reset complete")
+
+
+if __name__ == '__main__':
+    # Test database initialization
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    manager = get_db_manager()
+    logger.info("Database initialized successfully")
+    
+    # Test session
+    session = get_db_session()
+    logger.info(f"Test session created: {session}")
+    session.close()
