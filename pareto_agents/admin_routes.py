@@ -754,4 +754,4 @@ def list_audit_logs():
     except Exception as e:
         logger.error(f"❌ List audit logs error: {e}", exc_info=True)
         return jsonify({'success': False, 'message': 'An error occurred'}), 500
-```
+

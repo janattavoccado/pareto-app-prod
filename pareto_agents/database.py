@@ -338,3 +338,12 @@ if __name__ == '__main__':
     session = get_db_session()
     logger.info(f"Test session created: {session}")
     session.close()
+
+def init_db(database_url: Optional[str] = None):
+    """
+    Initialize the database and create tables.
+    
+    Args:
+        database_url: SQLAlchemy database URL.
+    """
+    get_db_manager(database_url)
