@@ -1,5 +1,5 @@
 """
-Admin Management Routes
+Admin Management Routes ....
 
 Provides Flask endpoints for:
 - User management (CRUD)
@@ -31,7 +31,7 @@ admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 def log_audit(admin_id: int, action: str, entity_type: str, entity_id: int = None, changes: dict = None, ip_address: str = None):
     """
     Log an administrative action
-    
+
     Args:
         admin_id: Administrator ID
         action: Action type (CREATE, UPDATE, DELETE, etc.)
@@ -67,7 +67,7 @@ def log_audit(admin_id: int, action: str, entity_type: str, entity_id: int = Non
 def dashboard():
     """
     Admin dashboard overview
-    
+
     Response:
     {
         "admin": {...},
@@ -83,17 +83,17 @@ def dashboard():
     try:
         admin_info = request.admin_info
         session = get_db_session()
-        
+
         try:
             # Get statistics
             tenant_count = session.query(Tenant).filter_by(is_active=True).count()
             user_count = session.query(User).count()
             active_user_count = session.query(User).filter_by(is_enabled=True).count()
             admin_count = session.query(Administrator).filter_by(is_active=True).count()
-            
+
             # Get recent activity
             recent_logs = session.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(10).all()
-            
+
             activity = []
             for log in recent_logs:
                 activity.append({
@@ -104,9 +104,9 @@ def dashboard():
                     'created_at': log.created_at.isoformat(),
                     'admin': log.administrator.username if log.administrator else 'System'
                 })
-            
+
             logger.info(f"✅ Dashboard accessed by {admin_info['username']}")
-            
+
             return jsonify({
                 'success': True,
                 'admin': admin_info,
@@ -118,10 +118,10 @@ def dashboard():
                 },
                 'recent_activity': activity
             }), 200
-        
+
         finally:
             session.close()
-    
+
     except Exception as e:
         logger.error(f"❌ Dashboard error: {e}", exc_info=True)
         return jsonify({'success': False, 'message': 'An error occurred'}), 500
@@ -136,11 +136,11 @@ def dashboard():
 def list_users():
     """
     List all users
-    
+
     Query parameters:
     - tenant_id: Filter by tenant (optional)
     - enabled: Filter by enabled status (true/false)
-    
+
     Response:
     {
         "success": true,
@@ -150,39 +150,39 @@ def list_users():
     try:
         admin_info = request.admin_info
         session = get_db_session()
-        
+
         try:
             # Get query parameters
             tenant_id = request.args.get('tenant_id', type=int)
             enabled = request.args.get('enabled')
-            
+
             # Build query
             query = session.query(User)
-            
+
             if tenant_id:
                 query = query.filter_by(tenant_id=tenant_id)
-            
+
             if enabled is not None:
                 enabled_bool = enabled.lower() == 'true'
                 query = query.filter_by(is_enabled=enabled_bool)
-            
+
             users = query.all()
-            
+
             users_data = []
             for user in users:
                 users_data.append(user.to_dict())
-            
+
             logger.info(f"✅ Listed {len(users)} users")
-            
+
             return jsonify({
                 'success': True,
                 'count': len(users_data),
                 'users': users_data
             }), 200
-        
+
         finally:
             session.close()
-    
+
     except Exception as e:
         logger.error(f"❌ List users error: {e}", exc_info=True)
         return jsonify({'success': False, 'message': 'An error occurred'}), 500
@@ -193,7 +193,7 @@ def list_users():
 def get_user(user_id):
     """
     Get user details
-    
+
     Response:
     {
         "success": true,
@@ -203,24 +203,24 @@ def get_user(user_id):
     try:
         admin_info = request.admin_info
         session = get_db_session()
-        
+
         try:
             user = session.query(User).filter_by(id=user_id).first()
-            
+
             if not user:
                 logger.warning(f"❌ User not found: {user_id}")
                 return jsonify({'success': False, 'message': 'User not found'}), 404
-            
+
             logger.info(f"✅ Retrieved user: {user.full_name}")
-            
+
             return jsonify({
                 'success': True,
                 'user': user.to_dict()
             }), 200
-        
+
         finally:
             session.close()
-    
+
     except Exception as e:
         logger.error(f"❌ Get user error: {e}", exc_info=True)
         return jsonify({'success': False, 'message': 'An error occurred'}), 500
@@ -231,7 +231,7 @@ def get_user(user_id):
 def create_user():
     """
     Create a new user
-    
+
     Request body:
     {
         "tenant_id": 1,
@@ -241,7 +241,7 @@ def create_user():
         "email": "john@example.com",
         "enabled": true
     }
-    
+
     Response:
     {
         "success": true,
@@ -251,29 +251,29 @@ def create_user():
     try:
         admin_info = request.admin_info
         data = request.get_json()
-        
+
         if not data:
             return jsonify({'success': False, 'message': 'Request body is required'}), 400
-        
+
         # Validate required fields
         required_fields = ['tenant_id', 'phone_number', 'first_name', 'last_name']
         for field in required_fields:
             if not data.get(field):
                 return jsonify({'success': False, 'message': f'{field} is required'}), 400
-        
+
         session = get_db_session()
-        
+
         try:
             # Check if user already exists
             existing = session.query(User).filter_by(
                 tenant_id=data['tenant_id'],
                 phone_number=data['phone_number']
             ).first()
-            
+
             if existing:
                 logger.warning(f"❌ User already exists: {data['phone_number']}")
                 return jsonify({'success': False, 'message': 'User already exists'}), 409
-            
+
             # Create user
             user = User(
                 tenant_id=data['tenant_id'],
@@ -283,10 +283,10 @@ def create_user():
                 email=data.get('email'),
                 is_enabled=data.get('enabled', True)
             )
-            
+
             session.add(user)
             session.commit()
-            
+
             # Log audit
             log_audit(
                 admin_id=admin_info['admin_id'],
@@ -296,17 +296,17 @@ def create_user():
                 changes=user.to_dict(),
                 ip_address=request.remote_addr
             )
-            
+
             logger.info(f"✅ User created: {user.full_name}")
-            
+
             return jsonify({
                 'success': True,
                 'user': user.to_dict()
             }), 201
-        
+
         finally:
             session.close()
-    
+
     except Exception as e:
         logger.error(f"❌ Create user error: {e}", exc_info=True)
         return jsonify({'success': False, 'message': 'An error occurred'}), 500
@@ -317,7 +317,7 @@ def create_user():
 def update_user(user_id):
     """
     Update user details
-    
+
     Request body:
     {
         "first_name": "John",
@@ -325,7 +325,7 @@ def update_user(user_id):
         "email": "john@example.com",
         "enabled": true
     }
-    
+
     Response:
     {
         "success": true,
@@ -335,43 +335,43 @@ def update_user(user_id):
     try:
         admin_info = request.admin_info
         data = request.get_json()
-        
+
         if not data:
             return jsonify({'success': False, 'message': 'Request body is required'}), 400
-        
+
         session = get_db_session()
-        
+
         try:
             user = session.query(User).filter_by(id=user_id).first()
-            
+
             if not user:
                 logger.warning(f"❌ User not found: {user_id}")
                 return jsonify({'success': False, 'message': 'User not found'}), 404
-            
+
             # Track changes
             changes = {}
-            
+
             # Update fields
             if 'first_name' in data and data['first_name'] != user.first_name:
                 changes['first_name'] = {'old': user.first_name, 'new': data['first_name']}
                 user.first_name = data['first_name']
-            
+
             if 'last_name' in data and data['last_name'] != user.last_name:
                 changes['last_name'] = {'old': user.last_name, 'new': data['last_name']}
                 user.last_name = data['last_name']
-            
+
             if 'email' in data and data['email'] != user.email:
                 changes['email'] = {'old': user.email, 'new': data['email']}
                 user.email = data['email']
-            
+
             if 'is_enabled' in data and data['is_enabled'] != user.is_enabled:
                 changes['is_enabled'] = {'old': user.is_enabled, 'new': data['is_enabled']}
                 user.is_enabled = data['is_enabled']
-            
+
             if changes:
                 user.updated_at = datetime.utcnow()
                 session.commit()
-                
+
                 # Log audit
                 log_audit(
                     admin_id=admin_info['admin_id'],
@@ -381,17 +381,17 @@ def update_user(user_id):
                     changes=changes,
                     ip_address=request.remote_addr
                 )
-                
+
                 logger.info(f"✅ User updated: {user.full_name}")
-            
+
             return jsonify({
                 'success': True,
                 'user': user.to_dict()
             }), 200
-        
+
         finally:
             session.close()
-    
+
     except Exception as e:
         logger.error(f"❌ Update user error: {e}", exc_info=True)
         return jsonify({'success': False, 'message': 'An error occurred'}), 500
@@ -402,7 +402,7 @@ def update_user(user_id):
 def delete_user(user_id):
     """
     Delete a user
-    
+
     Response:
     {
         "success": true
@@ -411,14 +411,14 @@ def delete_user(user_id):
     try:
         admin_info = request.admin_info
         session = get_db_session()
-        
+
         try:
             user = session.query(User).filter_by(id=user_id).first()
-            
+
             if not user:
                 logger.warning(f"❌ User not found: {user_id}")
                 return jsonify({'success': False, 'message': 'User not found'}), 404
-            
+
             # Log audit before deleting
             log_audit(
                 admin_id=admin_info['admin_id'],
@@ -428,17 +428,17 @@ def delete_user(user_id):
                 changes=user.to_dict(),
                 ip_address=request.remote_addr
             )
-            
+
             session.delete(user)
             session.commit()
-            
+
             logger.info(f"✅ User deleted: {user.full_name}")
-            
+
             return jsonify({'success': True}), 200
-        
+
         finally:
             session.close()
-    
+
     except Exception as e:
         logger.error(f"❌ Delete user error: {e}", exc_info=True)
         return jsonify({'success': False, 'message': 'An error occurred'}), 500
@@ -453,7 +453,7 @@ def delete_user(user_id):
 def get_tenants():
     """
     Get all tenants
-    
+
     Response:
     {
         "success": true,
@@ -473,7 +473,7 @@ def get_tenants():
 def create_tenant():
     """
     Create a new tenant
-    
+
     Request body:
     {
         "company_name": "New Company",
@@ -481,7 +481,7 @@ def create_tenant():
         "email": "contact@new-company.com",
         "phone": "123-456-7890"
     }
-    
+
     Response:
     {
         "success": true,
@@ -491,18 +491,18 @@ def create_tenant():
     try:
         admin_info = request.admin_info
         data = request.get_json()
-        
+
         if not data:
             return jsonify({'success': False, 'message': 'Request body is required'}), 400
-        
+
         # Validate required fields
         required_fields = ['company_name', 'company_slug']
         for field in required_fields:
             if not data.get(field):
                 return jsonify({'success': False, 'message': f'{field} is required'}), 400
-        
+
         session = get_db_session()
-        
+
         try:
             # Check for duplicate name or slug
             if session.query(Tenant).filter_by(company_name=data['company_name']).first():
@@ -517,10 +517,10 @@ def create_tenant():
                 phone=data.get('phone'),
                 created_by_admin_id=admin_info['admin_id']
             )
-            
+
             session.add(tenant)
             session.commit()
-            
+
             # Log audit
             log_audit(
                 admin_id=admin_info['admin_id'],
@@ -530,17 +530,17 @@ def create_tenant():
                 changes=tenant.to_dict(),
                 ip_address=request.remote_addr
             )
-            
+
             logger.info(f"✅ Tenant created: {tenant.company_name}")
-            
+
             return jsonify({
                 'success': True,
                 'tenant': tenant.to_dict()
             }), 201
-        
+
         finally:
             session.close()
-    
+
     except Exception as e:
         logger.error(f"❌ Create tenant error: {e}", exc_info=True)
         return jsonify({'success': False, 'message': 'An error occurred'}), 500
@@ -551,7 +551,7 @@ def create_tenant():
 def update_tenant(tenant_id):
     """
     Update tenant details
-    
+
     Request body:
     {
         "company_name": "Updated Company",
@@ -559,7 +559,7 @@ def update_tenant(tenant_id):
         "phone": "987-654-3210",
         "is_active": false
     }
-    
+
     Response:
     {
         "success": true,
@@ -569,22 +569,22 @@ def update_tenant(tenant_id):
     try:
         admin_info = request.admin_info
         data = request.get_json()
-        
+
         if not data:
             return jsonify({'success': False, 'message': 'Request body is required'}), 400
-        
+
         session = get_db_session()
-        
+
         try:
             tenant = session.query(Tenant).filter_by(id=tenant_id).first()
-            
+
             if not tenant:
                 logger.warning(f"❌ Tenant not found: {tenant_id}")
                 return jsonify({'success': False, 'message': 'Tenant not found'}), 404
-            
+
             # Track changes
             changes = {}
-            
+
             # Update fields
             if 'company_name' in data and data['company_name'] != tenant.company_name:
                 # Check for duplicate name
@@ -592,23 +592,23 @@ def update_tenant(tenant_id):
                     return jsonify({'success': False, 'message': 'Company name already exists'}), 409
                 changes['company_name'] = {'old': tenant.company_name, 'new': data['company_name']}
                 tenant.company_name = data['company_name']
-            
+
             if 'email' in data and data['email'] != tenant.email:
                 changes['email'] = {'old': tenant.email, 'new': data['email']}
                 tenant.email = data['email']
-            
+
             if 'phone' in data and data['phone'] != tenant.phone:
                 changes['phone'] = {'old': tenant.phone, 'new': data['phone']}
                 tenant.phone = data['phone']
-            
+
             if 'is_active' in data and data['is_active'] != tenant.is_active:
                 changes['is_active'] = {'old': tenant.is_active, 'new': data['is_active']}
                 tenant.is_active = data['is_active']
-            
+
             if changes:
                 tenant.updated_at = datetime.utcnow()
                 session.commit()
-                
+
                 # Log audit
                 log_audit(
                     admin_id=admin_info['admin_id'],
@@ -618,17 +618,17 @@ def update_tenant(tenant_id):
                     changes=changes,
                     ip_address=request.remote_addr
                 )
-                
+
                 logger.info(f"✅ Tenant updated: {tenant.company_name}")
-            
+
             return jsonify({
                 'success': True,
                 'tenant': tenant.to_dict()
             }), 200
-        
+
         finally:
             session.close()
-    
+
     except Exception as e:
         logger.error(f"❌ Update tenant error: {e}", exc_info=True)
         return jsonify({'success': False, 'message': 'An error occurred'}), 500
@@ -639,7 +639,7 @@ def update_tenant(tenant_id):
 def delete_tenant(tenant_id):
     """
     Delete a tenant
-    
+
     Response:
     {
         "success": true
@@ -648,14 +648,14 @@ def delete_tenant(tenant_id):
     try:
         admin_info = request.admin_info
         session = get_db_session()
-        
+
         try:
             tenant = session.query(Tenant).filter_by(id=tenant_id).first()
-            
+
             if not tenant:
                 logger.warning(f"❌ Tenant not found: {tenant_id}")
                 return jsonify({'success': False, 'message': 'Tenant not found'}), 404
-            
+
             # Log audit before deleting
             log_audit(
                 admin_id=admin_info['admin_id'],
@@ -665,17 +665,17 @@ def delete_tenant(tenant_id):
                 changes=tenant.to_dict(),
                 ip_address=request.remote_addr
             )
-            
+
             session.delete(tenant)
             session.commit()
-            
+
             logger.info(f"✅ Tenant deleted: {tenant.company_name}")
-            
+
             return jsonify({'success': True}), 200
-        
+
         finally:
             session.close()
-    
+
     except Exception as e:
         logger.error(f"❌ Delete tenant error: {e}", exc_info=True)
         return jsonify({'success': False, 'message': 'An error occurred'}), 500
@@ -691,12 +691,12 @@ def delete_tenant(tenant_id):
 def list_audit_logs():
     """
     List audit logs
-    
+
     Query parameters:
     - admin_id: Filter by admin ID
     - entity_type: Filter by entity type (USER, TENANT, etc.)
     - entity_id: Filter by entity ID
-    
+
     Response:
     {
         "success": true,
@@ -706,27 +706,27 @@ def list_audit_logs():
     try:
         admin_info = request.admin_info
         session = get_db_session()
-        
+
         try:
             # Get query parameters
             admin_id = request.args.get('admin_id', type=int)
             entity_type = request.args.get('entity_type')
             entity_id = request.args.get('entity_id', type=int)
-            
+
             # Build query
             query = session.query(AuditLog)
-            
+
             if admin_id:
                 query = query.filter_by(admin_id=admin_id)
-            
+
             if entity_type:
                 query = query.filter_by(entity_type=entity_type)
-            
+
             if entity_id:
                 query = query.filter_by(entity_id=entity_id)
-            
+
             logs = query.order_by(AuditLog.created_at.desc()).all()
-            
+
             logs_data = []
             for log in logs:
                 logs_data.append({
@@ -739,18 +739,18 @@ def list_audit_logs():
                     'created_at': log.created_at.isoformat(),
                     'admin': log.administrator.username if log.administrator else 'System'
                 })
-            
+
             logger.info(f"✅ Listed {len(logs)} audit logs")
-            
+
             return jsonify({
                 'success': True,
                 'count': len(logs_data),
                 'logs': logs_data
             }), 200
-        
+
         finally:
             session.close()
-    
+
     except Exception as e:
         logger.error(f"❌ List audit logs error: {e}", exc_info=True)
         return jsonify({'success': False, 'message': 'An error occurred'}), 500

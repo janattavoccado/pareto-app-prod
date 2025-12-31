@@ -1,5 +1,5 @@
 """
-Database Models and Configuration
+Database Models and Configuration....
 
 Provides SQLAlchemy ORM models for:
 - Administrators
@@ -35,7 +35,7 @@ Base = declarative_base()
 class Administrator(Base):
     """Administrator account model"""
     __tablename__ = 'administrators'
-    
+
     id = Column(Integer, primary_key=True)
     username = Column(String(255), unique=True, nullable=False)
     email = Column(String(255), unique=True, nullable=False)
@@ -45,12 +45,12 @@ class Administrator(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_login = Column(DateTime)
-    
+
     # Relationships
     sessions = relationship('AdminSession', back_populates='administrator', cascade='all, delete-orphan')
     audit_logs = relationship('AuditLog', back_populates='administrator', cascade='all, delete-orphan')
     tenants = relationship('Tenant', back_populates='created_by_admin', cascade='all, delete-orphan')
-    
+
     def __repr__(self):
         return f"<Administrator(id={self.id}, username={self.username}, email={self.email})>"
 
@@ -58,7 +58,7 @@ class Administrator(Base):
 class Tenant(Base):
     """Tenant (Company) model"""
     __tablename__ = 'tenants'
-    
+
     id = Column(Integer, primary_key=True)
     company_name = Column(String(255), nullable=False)
     company_slug = Column(String(255), unique=True, nullable=False)
@@ -68,15 +68,15 @@ class Tenant(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by_admin_id = Column(Integer, ForeignKey('administrators.id'), nullable=False)
-    
+
     # Relationships
     created_by_admin = relationship('Administrator', back_populates='tenants')
     users = relationship('User', back_populates='tenant', cascade='all, delete-orphan')
-    
+
     __table_args__ = (
         Index('idx_tenants_slug', 'company_slug'),
     )
-    
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -96,7 +96,7 @@ class Tenant(Base):
 class User(Base):
     """User (Team member) model"""
     __tablename__ = 'users'
-    
+
     id = Column(Integer, primary_key=True)
     tenant_id = Column(Integer, ForeignKey('tenants.id'), nullable=False)
     phone_number = Column(String(20), nullable=False)
@@ -109,26 +109,26 @@ class User(Base):
     google_token_updated_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Relationships
     tenant = relationship('Tenant', back_populates='users')
-    
+
     __table_args__ = (
         UniqueConstraint('tenant_id', 'phone_number', name='uq_tenant_phone'),
         Index('idx_users_tenant_id', 'tenant_id'),
         Index('idx_users_phone', 'phone_number'),
         Index('idx_users_tenant_phone', 'tenant_id', 'phone_number'),
     )
-    
+
     @property
     def full_name(self) -> str:
         """Get user's full name"""
         return f"{self.first_name} {self.last_name}".strip()
-    
+
     def has_google_token(self) -> bool:
         """Check if user has a Google token configured"""
         return bool(self.google_token_base64)
-    
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -151,7 +151,7 @@ class User(Base):
 class AdminSession(Base):
     """Administrator session model"""
     __tablename__ = 'admin_sessions'
-    
+
     id = Column(Integer, primary_key=True)
     admin_id = Column(Integer, ForeignKey('administrators.id'), nullable=False)
     session_token = Column(String(500), unique=True, nullable=False)
@@ -159,20 +159,20 @@ class AdminSession(Base):
     user_agent = Column(String(500))
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False)
-    
+
     # Relationships
     administrator = relationship('Administrator', back_populates='sessions')
-    
+
     __table_args__ = (
         Index('idx_admin_sessions_admin_id', 'admin_id'),
         Index('idx_admin_sessions_token', 'session_token'),
     )
-    
+
     @property
     def is_expired(self) -> bool:
         """Check if session is expired"""
         return datetime.utcnow() > self.expires_at
-    
+
     def __repr__(self):
         return f"<AdminSession(id={self.id}, admin_id={self.admin_id}, expired={self.is_expired})>"
 
@@ -180,7 +180,7 @@ class AdminSession(Base):
 class AuditLog(Base):
     """Audit log model for tracking administrative actions"""
     __tablename__ = 'audit_logs'
-    
+
     id = Column(Integer, primary_key=True)
     admin_id = Column(Integer, ForeignKey('administrators.id'))
     action = Column(String(255), nullable=False)
@@ -189,15 +189,15 @@ class AuditLog(Base):
     changes = Column(Text)  # JSON string of changes
     ip_address = Column(String(45))
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     # Relationships
     administrator = relationship('Administrator', back_populates='audit_logs')
-    
+
     __table_args__ = (
         Index('idx_audit_logs_admin_id', 'admin_id'),
         Index('idx_audit_logs_created_at', 'created_at'),
     )
-    
+
     def __repr__(self):
         return f"<AuditLog(id={self.id}, action={self.action}, entity={self.entity_type}:{self.entity_id})>"
 
@@ -208,11 +208,11 @@ class AuditLog(Base):
 
 class DatabaseManager:
     """Manages database connection and session lifecycle"""
-    
+
     def __init__(self, database_url: Optional[str] = None):
         """
         Initialize database manager
-        
+
         Args:
             database_url: SQLAlchemy database URL. If None, uses default SQLite path.
         """
@@ -221,10 +221,10 @@ class DatabaseManager:
             db_dir = Path('configurations')
             db_dir.mkdir(exist_ok=True)
             database_url = f'sqlite:///{db_dir}/pareto.db'
-        
+
         self.database_url = database_url
         logger.info(f"Initializing database: {database_url}")
-        
+
         # Create engine
         if database_url.startswith('sqlite://'):
             # SQLite specific configuration
@@ -236,13 +236,13 @@ class DatabaseManager:
         else:
             # For other databases (PostgreSQL, MySQL, etc.)
             self.engine = create_engine(database_url, echo=False)
-        
+
         # Create session factory
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
-        
+
         # Create tables
         self._create_tables()
-    
+
     def _create_tables(self):
         """Create all tables in the database"""
         try:
@@ -251,11 +251,11 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"❌ Error creating database tables: {e}")
             raise
-    
+
     def get_session(self) -> Session:
         """Get a new database session"""
         return self.SessionLocal()
-    
+
     def close(self):
         """Close database connection"""
         self.engine.dispose()
@@ -272,10 +272,10 @@ _db_manager: Optional[DatabaseManager] = None
 def get_db_manager(database_url: Optional[str] = None) -> DatabaseManager:
     """
     Get or create the global database manager instance
-    
+
     Args:
         database_url: SQLAlchemy database URL (used only on first call)
-        
+
     Returns:
         DatabaseManager instance
     """
@@ -288,7 +288,7 @@ def get_db_manager(database_url: Optional[str] = None) -> DatabaseManager:
 def get_db_session() -> Session:
     """
     Get a new database session
-    
+
     Usage in Flask:
         @app.route('/example')
         def example():
@@ -298,7 +298,7 @@ def get_db_session() -> Session:
                 pass
             finally:
                 db.close()
-    
+
     Returns:
         SQLAlchemy Session
     """
@@ -313,7 +313,7 @@ def reset_database(database_url: Optional[str] = None):
     """
     Reset database - drops all tables and recreates them
     WARNING: This will delete all data!
-    
+
     Args:
         database_url: SQLAlchemy database URL
     """
@@ -330,10 +330,10 @@ if __name__ == '__main__':
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
-    
+
     manager = get_db_manager()
     logger.info("Database initialized successfully")
-    
+
     # Test session
     session = get_db_session()
     logger.info(f"Test session created: {session}")
@@ -342,7 +342,7 @@ if __name__ == '__main__':
 def init_db(database_url: Optional[str] = None):
     """
     Initialize the database and create tables.
-    
+
     Args:
         database_url: SQLAlchemy database URL.
     """
