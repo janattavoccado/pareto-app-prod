@@ -170,18 +170,7 @@ def list_users():
             
             users_data = []
             for user in users:
-                users_data.append({
-                    'id': user.id,
-                    'tenant_id': user.tenant_id,
-                    'phone_number': user.phone_number,
-                    'first_name': user.first_name,
-                    'last_name': user.last_name,
-                    'full_name': user.full_name,
-                    'email': user.email,
-                    'enabled': user.is_enabled,
-                    'created_at': user.created_at.isoformat() if user.created_at else None,
-                    'updated_at': user.updated_at.isoformat() if user.updated_at else None
-                })
+                users_data.append(user.to_dict())
             
             logger.info(f"✅ Listed {len(users)} users")
             
@@ -222,25 +211,11 @@ def get_user(user_id):
                 logger.warning(f"❌ User not found: {user_id}")
                 return jsonify({'success': False, 'message': 'User not found'}), 404
             
-            user_data = {
-                'id': user.id,
-                'tenant_id': user.tenant_id,
-                'phone_number': user.phone_number,
-                'first_name': user.first_name,
-                'last_name': user.last_name,
-                'full_name': user.full_name,
-                'email': user.email,
-                'enabled': user.is_enabled,
-                'has_google_token': user.has_google_token(),
-                'created_at': user.created_at.isoformat() if user.created_at else None,
-                'updated_at': user.updated_at.isoformat() if user.updated_at else None
-            }
-            
             logger.info(f"✅ Retrieved user: {user.full_name}")
             
             return jsonify({
                 'success': True,
-                'user': user_data
+                'user': user.to_dict()
             }), 200
         
         finally:
@@ -264,8 +239,7 @@ def create_user():
         "first_name": "John",
         "last_name": "Doe",
         "email": "john@example.com",
-        "enabled": true,
-        "google_token_path": "path/to/token.json"
+        "enabled": true
     }
     
     Response:
@@ -307,8 +281,7 @@ def create_user():
                 first_name=data['first_name'],
                 last_name=data['last_name'],
                 email=data.get('email'),
-                is_enabled=data.get('enabled', True),
-                google_token_path=data.get('google_token_path')
+                is_enabled=data.get('enabled', True)
             )
             
             session.add(user)
@@ -320,20 +293,15 @@ def create_user():
                 action='CREATE',
                 entity_type='USER',
                 entity_id=user.id,
-                changes={'created': data},
+                changes=user.to_dict(),
                 ip_address=request.remote_addr
             )
             
-            logger.info(f"✅ Created user: {user.full_name}")
+            logger.info(f"✅ User created: {user.full_name}")
             
             return jsonify({
                 'success': True,
-                'message': 'User created successfully',
-                'user': {
-                    'id': user.id,
-                    'phone_number': user.phone_number,
-                    'full_name': user.full_name
-                }
+                'user': user.to_dict()
             }), 201
         
         finally:
@@ -348,14 +316,14 @@ def create_user():
 @require_auth
 def update_user(user_id):
     """
-    Update user information
+    Update user details
     
     Request body:
     {
-        "first_name": "Jane",
-        "last_name": "Smith",
-        "email": "jane@example.com",
-        "enabled": false
+        "first_name": "John",
+        "last_name": "Doe",
+        "email": "john@example.com",
+        "enabled": true
     }
     
     Response:
@@ -384,30 +352,27 @@ def update_user(user_id):
             changes = {}
             
             # Update fields
-            if 'first_name' in data:
+            if 'first_name' in data and data['first_name'] != user.first_name:
                 changes['first_name'] = {'old': user.first_name, 'new': data['first_name']}
                 user.first_name = data['first_name']
             
-            if 'last_name' in data:
+            if 'last_name' in data and data['last_name'] != user.last_name:
                 changes['last_name'] = {'old': user.last_name, 'new': data['last_name']}
                 user.last_name = data['last_name']
             
-            if 'email' in data:
+            if 'email' in data and data['email'] != user.email:
                 changes['email'] = {'old': user.email, 'new': data['email']}
                 user.email = data['email']
             
-            if 'enabled' in data:
-                changes['enabled'] = {'old': user.is_enabled, 'new': data['enabled']}
-                user.is_enabled = data['enabled']
+            if 'is_enabled' in data and data['is_enabled'] != user.is_enabled:
+                changes['is_enabled'] = {'old': user.is_enabled, 'new': data['is_enabled']}
+                user.is_enabled = data['is_enabled']
             
-            if 'google_token_path' in data:
-                changes['google_token_path'] = {'old': user.google_token_path, 'new': data['google_token_path']}
-                user.google_token_path = data['google_token_path']
-            
-            session.commit()
-            
-            # Log audit
             if changes:
+                user.updated_at = datetime.utcnow()
+                session.commit()
+                
+                # Log audit
                 log_audit(
                     admin_id=admin_info['admin_id'],
                     action='UPDATE',
@@ -416,19 +381,12 @@ def update_user(user_id):
                     changes=changes,
                     ip_address=request.remote_addr
                 )
-            
-            logger.info(f"✅ Updated user: {user.full_name}")
+                
+                logger.info(f"✅ User updated: {user.full_name}")
             
             return jsonify({
                 'success': True,
-                'message': 'User updated successfully',
-                'user': {
-                    'id': user.id,
-                    'phone_number': user.phone_number,
-                    'full_name': user.full_name,
-                    'email': user.email,
-                    'enabled': user.is_enabled
-                }
+                'user': user.to_dict()
             }), 200
         
         finally:
@@ -447,8 +405,7 @@ def delete_user(user_id):
     
     Response:
     {
-        "success": true,
-        "message": "User deleted successfully"
+        "success": true
     }
     """
     try:
@@ -462,26 +419,22 @@ def delete_user(user_id):
                 logger.warning(f"❌ User not found: {user_id}")
                 return jsonify({'success': False, 'message': 'User not found'}), 404
             
-            user_name = user.full_name
-            session.delete(user)
-            session.commit()
-            
-            # Log audit
+            # Log audit before deleting
             log_audit(
                 admin_id=admin_info['admin_id'],
                 action='DELETE',
                 entity_type='USER',
-                entity_id=user_id,
-                changes={'deleted': user_name},
+                entity_id=user.id,
+                changes=user.to_dict(),
                 ip_address=request.remote_addr
             )
             
-            logger.info(f"✅ Deleted user: {user_name}")
+            session.delete(user)
+            session.commit()
             
-            return jsonify({
-                'success': True,
-                'message': 'User deleted successfully'
-            }), 200
+            logger.info(f"✅ User deleted: {user.full_name}")
+            
+            return jsonify({'success': True}), 200
         
         finally:
             session.close()
@@ -497,64 +450,199 @@ def delete_user(user_id):
 
 @admin_bp.route('/tenants', methods=['GET'])
 @require_auth
-def list_tenants():
+def get_tenants():
     """
-    List all tenants
+    Get all tenants
     
     Response:
     {
         "success": true,
-        "tenants": [...]
+        "data": [...]
+    }
+    """
+    session = get_db_session()
+    try:
+        tenants = session.query(Tenant).all()
+        return jsonify({'success': True, 'data': [t.to_dict() for t in tenants]}), 200
+    finally:
+        session.close()
+
+
+@admin_bp.route('/tenants', methods=['POST'])
+@require_auth
+def create_tenant():
+    """
+    Create a new tenant
+    
+    Request body:
+    {
+        "company_name": "New Company",
+        "company_slug": "new-company",
+        "email": "contact@new-company.com",
+        "phone": "123-456-7890"
+    }
+    
+    Response:
+    {
+        "success": true,
+        "tenant": {...}
     }
     """
     try:
         admin_info = request.admin_info
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'success': False, 'message': 'Request body is required'}), 400
+        
+        # Validate required fields
+        required_fields = ['company_name', 'company_slug']
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({'success': False, 'message': f'{field} is required'}), 400
+        
         session = get_db_session()
         
         try:
-            tenants = session.query(Tenant).all()
+            # Check for duplicate name or slug
+            if session.query(Tenant).filter_by(company_name=data['company_name']).first():
+                return jsonify({'success': False, 'message': 'Company name already exists'}), 409
+            if session.query(Tenant).filter_by(company_slug=data['company_slug']).first():
+                return jsonify({'success': False, 'message': 'Company slug already exists'}), 409
+
+            tenant = Tenant(
+                company_name=data['company_name'],
+                company_slug=data['company_slug'],
+                email=data.get('email'),
+                phone=data.get('phone'),
+                created_by_admin_id=admin_info['admin_id']
+            )
             
-            tenants_data = []
-            for tenant in tenants:
-                user_count = session.query(User).filter_by(tenant_id=tenant.id).count()
-                tenants_data.append({
-                    'id': tenant.id,
-                    'company_name': tenant.company_name,
-                    'company_slug': tenant.company_slug,
-                    'email': tenant.email,
-                    'phone': tenant.phone,
-                    'active': tenant.is_active,
-                    'user_count': user_count,
-                    'created_at': tenant.created_at.isoformat() if tenant.created_at else None
-                })
+            session.add(tenant)
+            session.commit()
             
-            logger.info(f"✅ Listed {len(tenants)} tenants")
+            # Log audit
+            log_audit(
+                admin_id=admin_info['admin_id'],
+                action='CREATE',
+                entity_type='TENANT',
+                entity_id=tenant.id,
+                changes=tenant.to_dict(),
+                ip_address=request.remote_addr
+            )
+            
+            logger.info(f"✅ Tenant created: {tenant.company_name}")
             
             return jsonify({
                 'success': True,
-                'count': len(tenants_data),
-                'tenants': tenants_data
+                'tenant': tenant.to_dict()
+            }), 201
+        
+        finally:
+            session.close()
+    
+    except Exception as e:
+        logger.error(f"❌ Create tenant error: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': 'An error occurred'}), 500
+
+
+@admin_bp.route('/tenants/<int:tenant_id>', methods=['PUT'])
+@require_auth
+def update_tenant(tenant_id):
+    """
+    Update tenant details
+    
+    Request body:
+    {
+        "company_name": "Updated Company",
+        "email": "updated@company.com",
+        "phone": "987-654-3210",
+        "is_active": false
+    }
+    
+    Response:
+    {
+        "success": true,
+        "tenant": {...}
+    }
+    """
+    try:
+        admin_info = request.admin_info
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'success': False, 'message': 'Request body is required'}), 400
+        
+        session = get_db_session()
+        
+        try:
+            tenant = session.query(Tenant).filter_by(id=tenant_id).first()
+            
+            if not tenant:
+                logger.warning(f"❌ Tenant not found: {tenant_id}")
+                return jsonify({'success': False, 'message': 'Tenant not found'}), 404
+            
+            # Track changes
+            changes = {}
+            
+            # Update fields
+            if 'company_name' in data and data['company_name'] != tenant.company_name:
+                # Check for duplicate name
+                if session.query(Tenant).filter(Tenant.id != tenant_id, Tenant.company_name == data['company_name']).first():
+                    return jsonify({'success': False, 'message': 'Company name already exists'}), 409
+                changes['company_name'] = {'old': tenant.company_name, 'new': data['company_name']}
+                tenant.company_name = data['company_name']
+            
+            if 'email' in data and data['email'] != tenant.email:
+                changes['email'] = {'old': tenant.email, 'new': data['email']}
+                tenant.email = data['email']
+            
+            if 'phone' in data and data['phone'] != tenant.phone:
+                changes['phone'] = {'old': tenant.phone, 'new': data['phone']}
+                tenant.phone = data['phone']
+            
+            if 'is_active' in data and data['is_active'] != tenant.is_active:
+                changes['is_active'] = {'old': tenant.is_active, 'new': data['is_active']}
+                tenant.is_active = data['is_active']
+            
+            if changes:
+                tenant.updated_at = datetime.utcnow()
+                session.commit()
+                
+                # Log audit
+                log_audit(
+                    admin_id=admin_info['admin_id'],
+                    action='UPDATE',
+                    entity_type='TENANT',
+                    entity_id=tenant.id,
+                    changes=changes,
+                    ip_address=request.remote_addr
+                )
+                
+                logger.info(f"✅ Tenant updated: {tenant.company_name}")
+            
+            return jsonify({
+                'success': True,
+                'tenant': tenant.to_dict()
             }), 200
         
         finally:
             session.close()
     
     except Exception as e:
-        logger.error(f"❌ List tenants error: {e}", exc_info=True)
+        logger.error(f"❌ Update tenant error: {e}", exc_info=True)
         return jsonify({'success': False, 'message': 'An error occurred'}), 500
 
 
-@admin_bp.route('/tenants/<int:tenant_id>', methods=['GET'])
+@admin_bp.route('/tenants/<int:tenant_id>', methods=['DELETE'])
 @require_auth
-def get_tenant(tenant_id):
+def delete_tenant(tenant_id):
     """
-    Get tenant details with users
+    Delete a tenant
     
     Response:
     {
-        "success": true,
-        "tenant": {...},
-        "users": [...]
+        "success": true
     }
     """
     try:
@@ -568,39 +656,30 @@ def get_tenant(tenant_id):
                 logger.warning(f"❌ Tenant not found: {tenant_id}")
                 return jsonify({'success': False, 'message': 'Tenant not found'}), 404
             
-            users = session.query(User).filter_by(tenant_id=tenant_id).all()
+            # Log audit before deleting
+            log_audit(
+                admin_id=admin_info['admin_id'],
+                action='DELETE',
+                entity_type='TENANT',
+                entity_id=tenant.id,
+                changes=tenant.to_dict(),
+                ip_address=request.remote_addr
+            )
             
-            tenant_data = {
-                'id': tenant.id,
-                'company_name': tenant.company_name,
-                'company_slug': tenant.company_slug,
-                'email': tenant.email,
-                'phone': tenant.phone,
-                'active': tenant.is_active,
-                'created_at': tenant.created_at.isoformat() if tenant.created_at else None
-            }
+            session.delete(tenant)
+            session.commit()
             
-            users_data = [{
-                'id': u.id,
-                'phone_number': u.phone_number,
-                'full_name': u.full_name,
-                'enabled': u.is_enabled
-            } for u in users]
+            logger.info(f"✅ Tenant deleted: {tenant.company_name}")
             
-            logger.info(f"✅ Retrieved tenant: {tenant.company_name}")
-            
-            return jsonify({
-                'success': True,
-                'tenant': tenant_data,
-                'users': users_data
-            }), 200
+            return jsonify({'success': True}), 200
         
         finally:
             session.close()
     
     except Exception as e:
-        logger.error(f"❌ Get tenant error: {e}", exc_info=True)
+        logger.error(f"❌ Delete tenant error: {e}", exc_info=True)
         return jsonify({'success': False, 'message': 'An error occurred'}), 500
+
 
 
 # ============================================================================
@@ -614,10 +693,9 @@ def list_audit_logs():
     List audit logs
     
     Query parameters:
-    - admin_id: Filter by admin
-    - action: Filter by action
-    - entity_type: Filter by entity type
-    - limit: Number of records (default 50)
+    - admin_id: Filter by admin ID
+    - entity_type: Filter by entity type (USER, TENANT, etc.)
+    - entity_id: Filter by entity ID
     
     Response:
     {
@@ -632,36 +710,37 @@ def list_audit_logs():
         try:
             # Get query parameters
             admin_id = request.args.get('admin_id', type=int)
-            action = request.args.get('action')
             entity_type = request.args.get('entity_type')
-            limit = request.args.get('limit', 50, type=int)
+            entity_id = request.args.get('entity_id', type=int)
             
             # Build query
             query = session.query(AuditLog)
             
             if admin_id:
                 query = query.filter_by(admin_id=admin_id)
-            if action:
-                query = query.filter_by(action=action)
+            
             if entity_type:
                 query = query.filter_by(entity_type=entity_type)
             
-            logs = query.order_by(AuditLog.created_at.desc()).limit(limit).all()
+            if entity_id:
+                query = query.filter_by(entity_id=entity_id)
+            
+            logs = query.order_by(AuditLog.created_at.desc()).all()
             
             logs_data = []
             for log in logs:
                 logs_data.append({
                     'id': log.id,
-                    'admin': log.administrator.username if log.administrator else 'System',
                     'action': log.action,
                     'entity_type': log.entity_type,
                     'entity_id': log.entity_id,
                     'changes': json.loads(log.changes) if log.changes else None,
                     'ip_address': log.ip_address,
-                    'created_at': log.created_at.isoformat() if log.created_at else None
+                    'created_at': log.created_at.isoformat(),
+                    'admin': log.administrator.username if log.administrator else 'System'
                 })
             
-            logger.info(f"✅ Retrieved {len(logs)} audit logs")
+            logger.info(f"✅ Listed {len(logs)} audit logs")
             
             return jsonify({
                 'success': True,
@@ -675,12 +754,4 @@ def list_audit_logs():
     except Exception as e:
         logger.error(f"❌ List audit logs error: {e}", exc_info=True)
         return jsonify({'success': False, 'message': 'An error occurred'}), 500
-
-
-if __name__ == '__main__':
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    
-    logger.info("Admin routes module loaded successfully")
+```
