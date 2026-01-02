@@ -455,25 +455,37 @@ class CalendarActionExecutor:
         """
         response_lower = response_text.lower()
 
-        # Check for create/schedule keywords
-        create_keywords = ['create', 'schedule', 'book', 'add', 'new event', 'meeting scheduled']
-        if any(keyword in response_lower for keyword in create_keywords):
-            return 'create_event'
+        # IMPORTANT: Check for list/query keywords FIRST to avoid false positives
+        # Words like "schedule" can appear in both create and list contexts
+        # Query/summary requests should be detected before create actions
+        list_keywords = [
+            'summarize', 'summary', 'what do i have', 'what\'s on', 'what is on',
+            'show me', 'list', 'upcoming', 'today\'s', 'todays', 'tomorrow\'s',
+            'this week', 'next week', 'my calendar', 'my events', 'my meetings',
+            'check my', 'view my', 'get my', 'retrieve', 'fetch',
+            'i\'ll need access', 'need access', 'provide a summary'
+        ]
+        if any(keyword in response_lower for keyword in list_keywords):
+            return 'list_events'
+
+        # Check for delete keywords (before create, as "cancel" is more specific)
+        delete_keywords = ['delete', 'cancel', 'remove', 'cancelled']
+        if any(keyword in response_lower for keyword in delete_keywords):
+            return 'delete_event'
 
         # Check for update keywords
         update_keywords = ['update', 'change', 'reschedule', 'modify', 'moved to']
         if any(keyword in response_lower for keyword in update_keywords):
             return 'update_event'
 
-        # Check for delete keywords
-        delete_keywords = ['delete', 'cancel', 'remove', 'cancelled']
-        if any(keyword in response_lower for keyword in delete_keywords):
-            return 'delete_event'
-
-        # Check for list keywords
-        list_keywords = ['list', 'show', 'upcoming', 'events', 'meetings', 'schedule']
-        if any(keyword in response_lower for keyword in list_keywords):
-            return 'list_events'
+        # Check for create/schedule keywords LAST
+        # These are more generic and should only match if no other action fits
+        create_keywords = [
+            'meeting scheduled', 'event created', 'booked', 'scheduled for',
+            'create', 'schedule', 'book', 'add', 'new event', 'set up'
+        ]
+        if any(keyword in response_lower for keyword in create_keywords):
+            return 'create_event'
 
         return 'unknown'
 

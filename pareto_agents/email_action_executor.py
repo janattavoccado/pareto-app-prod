@@ -136,14 +136,27 @@ class EmailActionExecutor:
         """
         response_lower = response_text.lower()
         
-        if any(word in response_lower for word in ['send', 'sent', 'sending', 'email to']):
-            return 'send_email'
-        elif any(word in response_lower for word in ['unread', 'check', 'inbox']):
-            return 'check_unread'
-        elif any(word in response_lower for word in ['list', 'search', 'find']):
+        # IMPORTANT: Check for list/summarize keywords FIRST to avoid false positives
+        # "summarize emails" should be list_emails, not send_email
+        list_keywords = [
+            'summarize', 'summary', 'list', 'show', 'recent', 'latest',
+            'last', 'my emails', 'my messages', 'get emails', 'retrieve',
+            'fetch', 'read', 'what emails', 'any emails', 'new emails'
+        ]
+        if any(keyword in response_lower for keyword in list_keywords):
             return 'list_emails'
-        else:
-            return 'unknown'
+        
+        # Check for unread-specific keywords
+        unread_keywords = ['unread', 'inbox', 'check inbox', 'new messages']
+        if any(keyword in response_lower for keyword in unread_keywords):
+            return 'check_unread'
+        
+        # Check for send keywords LAST (most specific action)
+        send_keywords = ['send', 'sent', 'sending', 'email to', 'compose', 'write email']
+        if any(keyword in response_lower for keyword in send_keywords):
+            return 'send_email'
+        
+        return 'unknown'
     
     def _parse_send_email_action(self, response_text: str) -> Optional[SendEmailRequest]:
         """
@@ -346,6 +359,12 @@ class EmailActionExecutor:
                         executed=False
                     )
             
+            elif action_type == 'list_emails':
+                return self.execute_list_emails(response_text)
+            
+            elif action_type == 'check_unread':
+                return self.execute_check_unread()
+            
             else:
                 return ActionResult(
                     success=False,
@@ -360,5 +379,146 @@ class EmailActionExecutor:
                 success=False,
                 action="unknown",
                 response=f"❌ Error: {str(e)}",
+                executed=False
+            )
+
+    def execute_list_emails(self, response_text: str) -> ActionResult:
+        """
+        Execute list emails action - retrieves and summarizes recent emails
+        
+        Args:
+            response_text (str): Original response text (used to determine count)
+            
+        Returns:
+            ActionResult: Execution result with email summaries
+        """
+        try:
+            if not self.email_client:
+                logger.error("Email client not initialized")
+                return ActionResult(
+                    success=False,
+                    action="list_emails",
+                    response="❌ Email client not initialized. Please connect your email account.",
+                    executed=False
+                )
+            
+            # Determine how many emails to fetch (default 5, max 10)
+            import re
+            count_match = re.search(r'(\d+)\s*(?:emails?|messages?)', response_text.lower())
+            max_results = int(count_match.group(1)) if count_match else 5
+            max_results = min(max_results, 10)  # Cap at 10
+            
+            logger.info(f"Fetching {max_results} recent emails")
+            
+            # Fetch recent emails
+            emails = self.email_client.list_emails(query="", max_results=max_results)
+            
+            if not emails:
+                return ActionResult(
+                    success=True,
+                    action="list_emails",
+                    response="📧 No recent emails found in your inbox.",
+                    executed=True,
+                    data={"count": 0, "emails": []}
+                )
+            
+            # Format email summaries
+            email_summaries = []
+            for i, email in enumerate(emails, 1):
+                sender = email.get('from', 'Unknown')
+                # Truncate long sender names
+                if len(sender) > 40:
+                    sender = sender[:37] + "..."
+                subject = email.get('subject', 'No Subject')
+                if len(subject) > 50:
+                    subject = subject[:47] + "..."
+                snippet = email.get('snippet', '')[:100]
+                
+                email_summaries.append(f"{i}. *From:* {sender}\n   *Subject:* {subject}")
+            
+            response_msg = f"📧 *Your {len(emails)} most recent emails:*\n\n" + "\n\n".join(email_summaries)
+            
+            logger.info(f"Successfully retrieved {len(emails)} emails")
+            return ActionResult(
+                success=True,
+                action="list_emails",
+                response=response_msg,
+                executed=True,
+                data={"count": len(emails), "emails": emails}
+            )
+        
+        except Exception as e:
+            logger.error(f"Error listing emails: {str(e)}", exc_info=True)
+            return ActionResult(
+                success=False,
+                action="list_emails",
+                response=f"❌ Error retrieving emails: {str(e)}",
+                executed=False
+            )
+    
+    def execute_check_unread(self) -> ActionResult:
+        """
+        Execute check unread emails action
+        
+        Returns:
+            ActionResult: Execution result with unread count and summaries
+        """
+        try:
+            if not self.email_client:
+                logger.error("Email client not initialized")
+                return ActionResult(
+                    success=False,
+                    action="check_unread",
+                    response="❌ Email client not initialized. Please connect your email account.",
+                    executed=False
+                )
+            
+            # Get unread count
+            unread_count = self.email_client.get_inbox_count()
+            
+            # Fetch unread emails
+            unread_emails = self.email_client.list_emails(query="is:unread", max_results=5)
+            
+            if unread_count == 0:
+                return ActionResult(
+                    success=True,
+                    action="check_unread",
+                    response="✅ You have no unread emails. Your inbox is clear!",
+                    executed=True,
+                    data={"unread_count": 0, "emails": []}
+                )
+            
+            # Format unread email summaries
+            email_summaries = []
+            for i, email in enumerate(unread_emails, 1):
+                sender = email.get('from', 'Unknown')
+                if len(sender) > 40:
+                    sender = sender[:37] + "..."
+                subject = email.get('subject', 'No Subject')
+                if len(subject) > 50:
+                    subject = subject[:47] + "..."
+                
+                email_summaries.append(f"{i}. *From:* {sender}\n   *Subject:* {subject}")
+            
+            if unread_count > 5:
+                response_msg = f"📬 *You have {unread_count} unread emails.* Here are the 5 most recent:\n\n" + "\n\n".join(email_summaries)
+            else:
+                response_msg = f"📬 *You have {unread_count} unread email(s):*\n\n" + "\n\n".join(email_summaries)
+            
+            logger.info(f"Successfully checked unread emails: {unread_count} unread")
+            return ActionResult(
+                success=True,
+                action="check_unread",
+                response=response_msg,
+                executed=True,
+                data={"unread_count": unread_count, "emails": unread_emails}
+            )
+        
+        except Exception as e:
+            logger.error(f"Error checking unread emails: {str(e)}", exc_info=True)
+            return ActionResult(
+                success=False,
+                action="check_unread",
+                response=f"❌ Error checking unread emails: {str(e)}",
                 executed=False
             )
