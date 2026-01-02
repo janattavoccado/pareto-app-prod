@@ -89,6 +89,30 @@ def run_migration():
                     ALTER TABLE users 
                     ADD COLUMN google_token_base64 TEXT
                 """
+            },
+            {
+                'name': 'Rename last_login_at to last_login in administrators table',
+                'check': """
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'administrators' AND column_name = 'last_login'
+                """,
+                'sql': """
+                    ALTER TABLE administrators 
+                    RENAME COLUMN last_login_at TO last_login
+                """
+            },
+            {
+                'name': 'Add last_login column to administrators table (if missing)',
+                'check': """
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'administrators' AND column_name = 'last_login'
+                """,
+                'sql': """
+                    ALTER TABLE administrators 
+                    ADD COLUMN last_login TIMESTAMP
+                """
             }
         ]
         
