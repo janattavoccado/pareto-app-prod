@@ -1,67 +1,37 @@
 /**
- * Pareto Admin Dashboard - JavaScript (v2 - Fixed Session Handling)
+ * Pareto Admin Dashboard - JavaScript
  * Handles all dashboard functionality, API calls, and UI interactions
  */
+
+// ============================================================================
+// Configuration
+// ============================================================================
 
 const API_BASE_URL = window.location.origin + '/api';
 let sessionToken = localStorage.getItem('sessionToken');
 let currentAdminInfo = null;
+let currentEditingUserId = null;
+let currentDeleteTarget = null;
+let tenants = [];
 
 // ============================================================================
 // Initialization
 // ============================================================================
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('🔧 Dashboard initializing...');
-    console.log('📝 Session token:', sessionToken ? 'EXISTS' : 'MISSING');
+    // Load theme preference
+    loadTheme();
     
-    // Setup event listeners first
-    setupEventListeners();
-    
-    // Check for existing session token
+    // Check if logged in
     if (sessionToken) {
-        console.log('🔍 Validating existing session...');
         await validateSession();
     } else {
-        console.log('❌ No session token found, showing login modal');
         showLoginModal();
     }
+    
+    // Event listeners
+    setupEventListeners();
 });
-
-// ============================================================================
-// Event Listeners
-// ============================================================================
-
-function setupEventListeners() {
-    const themeToggle = document.getElementById('themeToggle');
-    const logoutBtn = document.getElementById('logoutBtn');
-    const loginForm = document.getElementById('loginForm');
-    
-    if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
-    if (logoutBtn) logoutBtn.addEventListener('click', logout);
-    if (loginForm) loginForm.addEventListener('submit', handleLogin);
-    
-    // Sidebar navigation
-    document.querySelectorAll('.sidebar-item').forEach(item => {
-        item.addEventListener('click', () => navigateToPage(item.dataset.page));
-    });
-
-    // Modal buttons
-    document.getElementById('addTenantBtn').addEventListener('click', () => openTenantModal());
-    document.getElementById('addUserBtn').addEventListener('click', () => openUserModal());
-    document.getElementById('tenantForm').addEventListener('submit', handleTenantFormSubmit);
-    document.getElementById('userForm').addEventListener('submit', handleUserFormSubmit);
-
-    // Close modal buttons
-    document.querySelectorAll('.close-button').forEach(btn => {
-        btn.addEventListener('click', () => {
-            closeModal('tenantModal');
-            closeModal('userModal');
-        });
-    });
-        item.addEventListener('click', () => navigateToPage(item.dataset.page));
-    });
-}
 
 // ============================================================================
 // Theme Management
@@ -69,14 +39,53 @@ function setupEventListeners() {
 
 function loadTheme() {
     const savedTheme = localStorage.getItem('theme') || 'light';
-    document.body.className = savedTheme + '-mode';
+    if (savedTheme === 'dark') {
+        document.body.classList.add('dark-mode');
+        document.getElementById('themeToggle').textContent = 'brightness_7';
+    }
 }
 
 function toggleTheme() {
-    const isDark = document.body.classList.toggle('dark-mode');
-    document.body.classList.toggle('light-mode', !isDark);
-    const newTheme = isDark ? 'dark' : 'light';
-    localStorage.setItem('theme', newTheme);
+    document.body.classList.toggle('dark-mode');
+    const isDark = document.body.classList.contains('dark-mode');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    document.getElementById('themeToggle').textContent = isDark ? 'brightness_7' : 'brightness_4';
+}
+
+// ============================================================================
+// Event Listeners
+// ============================================================================
+
+function setupEventListeners() {
+    // Theme toggle
+    document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+    
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', logout);
+    
+    // Login form
+    document.getElementById('loginForm').addEventListener('submit', handleLogin);
+    
+    // Sidebar navigation
+    document.querySelectorAll('.sidebar-item').forEach(item => {
+        item.addEventListener('click', () => navigateToPage(item.dataset.page));
+    });
+    
+    // User management
+    document.getElementById('addUserBtn').addEventListener('click', openAddUserModal);
+    document.getElementById('userForm').addEventListener('submit', handleSaveUser);
+    document.getElementById('userSearchInput').addEventListener('input', filterUsers);
+    document.getElementById('userFilterEnabled').addEventListener('change', filterUsers);
+
+    // Tenant management
+    document.getElementById('tenantForm').addEventListener('submit', handleSaveTenant);
+    
+    // Settings
+    document.getElementById('changePasswordForm').addEventListener('submit', handleChangePassword);
+    
+    // Audit logs filters
+    document.getElementById('auditFilterAction').addEventListener('change', loadAuditLogs);
+    document.getElementById('auditFilterEntity').addEventListener('change', loadAuditLogs);
 }
 
 // ============================================================================
@@ -85,7 +94,6 @@ function toggleTheme() {
 
 async function handleLogin(e) {
     e.preventDefault();
-    console.log('🔐 Handling login...');
     
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
@@ -99,32 +107,27 @@ async function handleLogin(e) {
         });
         
         const data = await response.json();
-        console.log('📨 Login response:', data.success ? 'SUCCESS' : 'FAILED');
         
-        if (data.success && data.session_token) {
+        if (data.success) {
             sessionToken = data.session_token;
             localStorage.setItem('sessionToken', sessionToken);
             currentAdminInfo = data.admin;
             
-            console.log('✅ Login successful, hiding modal');
-            hideLoginModal();
+            // Hide login modal and load dashboard
+            document.getElementById('loginModal').classList.remove('active');
+            document.querySelector('.container-main').style.display = 'flex';
             updateAdminInfo();
             await loadDashboard();
-            navigateToPage('dashboard');
+            
             showAlert('Login successful!', 'success');
         } else {
-            console.log('❌ Login failed:', data.message);
-            if (loginError) {
-                loginError.classList.remove('hidden');
-                document.getElementById('loginErrorMsg').textContent = data.message || 'Login failed';
-            }
+            loginError.classList.remove('hidden');
+            document.getElementById('loginErrorMsg').textContent = data.message || 'Login failed';
         }
     } catch (error) {
-        console.error('❌ Login error:', error);
-        if (loginError) {
-            loginError.classList.remove('hidden');
-            document.getElementById('loginErrorMsg').textContent = 'An error occurred during login';
-        }
+        console.error('Login error:', error);
+        loginError.classList.remove('hidden');
+        document.getElementById('loginErrorMsg').textContent = 'An error occurred during login';
     }
 }
 
@@ -135,93 +138,55 @@ async function validateSession() {
         });
         
         const data = await response.json();
-        console.log('📨 Session validation response:', data.success ? 'VALID' : 'INVALID');
         
-        if (data.success && data.admin) {
+        if (data.success) {
             currentAdminInfo = data.admin;
-            console.log('✅ Session valid, hiding modal');
-            hideLoginModal();
             updateAdminInfo();
             await loadDashboard();
-            navigateToPage('dashboard');
+            document.querySelector('.container-main').style.display = 'flex';
         } else {
-            console.log('❌ Session invalid, showing login');
-            logout(true);
+            sessionToken = null;
+            localStorage.removeItem('sessionToken');
+            showLoginModal();
         }
     } catch (error) {
-        console.error('❌ Session validation error:', error);
-        logout(true);
+        console.error('Session validation error:', error);
+        sessionToken = null;
+        localStorage.removeItem('sessionToken');
+        showLoginModal();
     }
 }
 
-async function logout(soft = false) {
-    console.log('🚪 Logging out...');
-    
-    if (sessionToken) {
-        try {
-            await fetch(`${API_BASE_URL}/auth/logout`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${sessionToken}` }
-            });
-        } catch (error) {
-            console.error('⚠️  Logout API call failed:', error);
-        }
+async function logout() {
+    try {
+        await fetch(`${API_BASE_URL}/auth/logout`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+    } catch (error) {
+        console.error('Logout error:', error);
     }
     
     sessionToken = null;
     localStorage.removeItem('sessionToken');
     currentAdminInfo = null;
     showLoginModal();
-    
-    if (!soft) {
-        showAlert('You have been logged out.', 'info');
-    }
 }
-
-// ============================================================================
-// UI Management
-// ============================================================================
 
 function showLoginModal() {
-    console.log('🎯 Showing login modal');
-    const loginModal = document.getElementById('loginModal');
-    const containerMain = document.querySelector('.container-main');
-    
-    if (loginModal) loginModal.classList.add('active');
-    if (containerMain) containerMain.style.display = 'none';
-}
-
-function hideLoginModal() {
-    console.log('🎯 Hiding login modal');
-    const loginModal = document.getElementById('loginModal');
-    const containerMain = document.querySelector('.container-main');
-    
-    if (loginModal) loginModal.classList.remove('active');
-    if (containerMain) containerMain.style.display = 'flex';
+    document.getElementById('loginModal').classList.add('active');
+    document.querySelector('.container-main').style.display = 'none';
 }
 
 function updateAdminInfo() {
     if (currentAdminInfo) {
-        const adminNameEl = document.getElementById('adminName');
-        const userAvatarEl = document.getElementById('userAvatar');
-        
-        if (adminNameEl) {
-            adminNameEl.textContent = currentAdminInfo.username || 'Admin';
-        }
-        
-        if (userAvatarEl) {
-            let initials = 'AD';
-            if (currentAdminInfo.full_name && typeof currentAdminInfo.full_name === 'string') {
-                initials = currentAdminInfo.full_name
-                    .split(' ')
-                    .map(n => n[0])
-                    .join('')
-                    .toUpperCase();
-            } else if (currentAdminInfo.username) {
-                initials = currentAdminInfo.username.substring(0, 2).toUpperCase();
-            }
-            userAvatarEl.textContent = initials;
-        }
+        document.getElementById('adminName').textContent = currentAdminInfo.username;
+        const initials = currentAdminInfo.full_name
+            .split(' ')
+            .map(n => n[0])
+            .join('')
+            .toUpperCase();
+        document.getElementById('userAvatar').textContent = initials;
     }
 }
 
@@ -230,15 +195,16 @@ function updateAdminInfo() {
 // ============================================================================
 
 function navigateToPage(page) {
-    console.log('📄 Navigating to:', page);
-    
     // Update sidebar
-    document.querySelectorAll('.sidebar-item').forEach(item => item.classList.remove('active'));
-    const activeItem = document.querySelector(`[data-page="${page}"]`);
-    if (activeItem) activeItem.classList.add('active');
+    document.querySelectorAll('.sidebar-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    document.querySelector(`[data-page="${page}"]`).classList.add('active');
     
     // Hide all pages
-    document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+    document.querySelectorAll('.page').forEach(p => {
+        p.classList.add('hidden');
+    });
     
     // Show selected page
     const pageElement = document.getElementById(`${page}Page`);
@@ -248,10 +214,12 @@ function navigateToPage(page) {
         // Load page data
         if (page === 'dashboard') {
             loadDashboard();
-        } else if (page === 'tenants') {
-            loadTenants();
         } else if (page === 'users') {
             loadUsers();
+        } else if (page === 'tenants') {
+            loadTenants();
+        } else if (page === 'audit-logs') {
+            loadAuditLogs();
         }
     }
 }
@@ -261,303 +229,153 @@ function navigateToPage(page) {
 // ============================================================================
 
 async function loadDashboard() {
-    console.log('📊 Loading dashboard...');
-    
     try {
         const response = await fetch(`${API_BASE_URL}/admin/dashboard`, {
             headers: { 'Authorization': `Bearer ${sessionToken}` }
         });
+        const data = await response.json();
         
-        const result = await response.json();
-        console.log('📨 Dashboard response:', result.success ? 'SUCCESS' : 'FAILED');
-        
-        if (result.success && result.data) {
-            const stats = result.data.statistics || {};
+        if (data.success) {
+            const stats = data.statistics;
+            document.getElementById('totalTenants').textContent = stats.total_tenants;
+            document.getElementById('totalUsers').textContent = stats.total_users;
+            document.getElementById('activeUsers').textContent = stats.active_users;
+            document.getElementById('totalAdmins').textContent = stats.total_admins;
             
-            // Update statistics
-            const totalTenantsEl = document.getElementById('totalTenants');
-            const totalUsersEl = document.getElementById('totalUsers');
-            const totalAdminsEl = document.getElementById('totalAdmins');
-            
-            if (totalTenantsEl) totalTenantsEl.textContent = stats.tenant_count ?? '0';
-            if (totalUsersEl) totalUsersEl.textContent = stats.user_count ?? '0';
-            if (totalAdminsEl) totalAdminsEl.textContent = stats.admin_count ?? '0';
-            
-            console.log('✅ Dashboard statistics updated');
-            
-            // Render recent data
-            if (result.data.recent_tenants) {
-                renderRecentTenants(result.data.recent_tenants);
-            }
-            if (result.data.recent_users) {
-                renderRecentUsers(result.data.recent_users);
-            }
+            displayRecentActivity(data.recent_activity);
         } else {
-            console.log('⚠️  Dashboard response incomplete');
+            showAlert(data.message, 'error');
         }
     } catch (error) {
-        console.error('❌ Dashboard load error:', error);
+        console.error('Error loading dashboard:', error);
         showAlert('Failed to load dashboard data', 'error');
     }
 }
 
-function renderRecentTenants(tenants) {
-    const container = document.getElementById('recentTenantsContainer');
-    if (!container) return;
-    
-    if (!tenants || tenants.length === 0) {
-        container.innerHTML = '<p style="text-align: center; color: #999;">No recent tenants</p>';
-        return;
-    }
-    
-    let html = '<table style="width: 100%; border-collapse: collapse;"><thead><tr><th style="text-align: left; padding: 8px; border-bottom: 1px solid #ddd;">Name</th><th style="text-align: left; padding: 8px; border-bottom: 1px solid #ddd;">Status</th></tr></thead><tbody>';
-    
-    tenants.forEach(tenant => {
-        const status = tenant.is_active ? '<span style="color: green;">✓ Active</span>' : '<span style="color: red;">✗ Inactive</span>';
-        html += `<tr><td style="padding: 8px; border-bottom: 1px solid #eee;">${tenant.name}</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${status}</td></tr>`;
-    });
-    
-    html += '</tbody></table>';
-    container.innerHTML = html;
-}
-
-function renderRecentUsers(users) {
-    const container = document.getElementById('recentUsersContainer');
-    if (!container) return;
-    
-    if (!users || users.length === 0) {
-        container.innerHTML = '<p style="text-align: center; color: #999;">No recent users</p>';
-        return;
-    }
-    
-    let html = '<table style="width: 100%; border-collapse: collapse;"><thead><tr><th style="text-align: left; padding: 8px; border-bottom: 1px solid #ddd;">Phone</th><th style="text-align: left; padding: 8px; border-bottom: 1px solid #ddd;">Email</th><th style="text-align: left; padding: 8px; border-bottom: 1px solid #ddd;">Status</th></tr></thead><tbody>';
-    
-    users.forEach(user => {
-        const status = user.is_enabled ? '<span style="color: green;">✓ Enabled</span>' : '<span style="color: red;">✗ Disabled</span>';
-        html += `<tr><td style="padding: 8px; border-bottom: 1px solid #eee;">${user.phone_number}</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${user.email || 'N/A'}</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${status}</td></tr>`;
-    });
-    
-    html += '</tbody></table>';
-    container.innerHTML = html;
-}
-
-// ============================================================================
-// Utility Functions
-// ============================================================================
-
-function showAlert(message, type = 'info') {
-    console.log(`🔔 Alert [${type}]:`, message);
-    
-    const alertContainer = document.getElementById('alertContainer');
-    if (!alertContainer) return;
-    
-    const alert = document.createElement('div');
-    alert.className = `alert alert-${type}`;
-    alert.textContent = message;
-    alert.style.padding = '12px 16px';
-    alert.style.marginBottom = '8px';
-    alert.style.borderRadius = '4px';
-    alert.style.backgroundColor = type === 'success' ? '#d4edda' : type === 'error' ? '#f8d7da' : '#d1ecf1';
-    alert.style.color = type === 'success' ? '#155724' : type === 'error' ? '#721c24' : '#0c5460';
-    
-    alertContainer.appendChild(alert);
-    setTimeout(() => alert.remove(), 5000);
-}
-
-// ============================================================================
-// Tenants Page
-// ============================================================================
-
-async function loadTenants() {
-    console.log('📋 Loading tenants...');
-    try {
-        const response = await fetch(`${API_BASE_URL}/admin/tenants`, {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
-        });
-        const result = await response.json();
-        if (result.success) {
-            renderTenantsTable(result.data);
-        } else {
-            showAlert('Failed to load tenants', 'error');
-        }
-    } catch (error) {
-        console.error('❌ Error loading tenants:', error);
-        showAlert('Failed to load tenants', 'error');
+function displayRecentActivity(activity) {
+    const container = document.getElementById('recentActivityContainer');
+    if (activity && activity.length > 0) {
+        container.innerHTML = activity.map(log => `
+            <div class="activity-item">
+                <span class="activity-time">${new Date(log.created_at).toLocaleString()}</span>
+                <span class="activity-admin">${log.admin}</span>
+                <span class="activity-action">${log.action}</span>
+                <span class="activity-entity">${log.entity_type} ${log.entity_id || ''}</span>
+            </div>
+        `).join('');
+    } else {
+        container.innerHTML = '<p style="text-align: center; color: #7f8c8d;">No recent activity</p>';
     }
 }
 
-function renderTenantsTable(tenants) {
-    const tbody = document.querySelector('#tenantsTable tbody');
-    if (!tbody) return;
-    
-    tbody.innerHTML = '';
-    if (!tenants || tenants.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 20px;">No tenants found</td></tr>';
-        return;
-    }
-    
-    tenants.forEach(tenant => {
-        const row = document.createElement('tr');
-        const status = tenant.is_active ? '✓ Active' : '✗ Inactive';
-        row.innerHTML = `
-            <td style="padding: 8px;">${tenant.name}</td>
-            <td style="padding: 8px;">${status}</td>
-            <td style="padding: 8px;"><button onclick="alert('Edit tenant ${tenant.id}')">Edit</button> <button onclick="alert('Delete tenant ${tenant.id}')">Delete</button></td>
-        `;
-        tbody.appendChild(row);
-    });
-}
-
 // ============================================================================
-// Users Page
+// User Management
 // ============================================================================
 
 async function loadUsers() {
-    console.log('👥 Loading users...');
     try {
         const response = await fetch(`${API_BASE_URL}/admin/users`, {
             headers: { 'Authorization': `Bearer ${sessionToken}` }
         });
-        const result = await response.json();
-        if (result.success) {
-            renderUsersTable(result.data);
+        const data = await response.json();
+        
+        if (data.success) {
+            displayUsers(data.users);
+            await loadTenantsForDropdown();
         } else {
-            showAlert('Failed to load users', 'error');
+            showAlert(data.message, 'error');
         }
     } catch (error) {
-        console.error('❌ Error loading users:', error);
+        console.error('Error loading users:', error);
         showAlert('Failed to load users', 'error');
     }
 }
 
-function renderUsersTable(users) {
-    const tbody = document.querySelector('#usersTable tbody');
-    if (!tbody) return;
-    
-    tbody.innerHTML = '';
-    if (!users || users.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px;">No users found</td></tr>';
-        return;
-    }
-    
-    users.forEach(user => {
-        const row = document.createElement('tr');
-        const status = user.is_enabled ? '✓ Enabled' : '✗ Disabled';
-        const fullName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'N/A';
-        row.innerHTML = `
-            <td style="padding: 8px;">${user.phone_number}</td>
-            <td style="padding: 8px;">${user.email || 'N/A'}</td>
-            <td style="padding: 8px;">${fullName}</td>
-            <td style="padding: 8px;">${status}</td>
-            <td style="padding: 8px;"><button onclick="alert('Edit user ${user.id}')">Edit</button> <button onclick="alert('Delete user ${user.id}')">Delete</button></td>
-        `;
-        tbody.appendChild(row);
-    });
+function displayUsers(users) {
+    const tableBody = document.getElementById('usersTableBody');
+    tableBody.innerHTML = users.map(user => {
+        // Escape single quotes in names for onclick handler
+        const escapedName = `${user.first_name} ${user.last_name}`.replace(/'/g, "\\'");
+        const tokenUpdatedAt = user.google_token_updated_at || null;
+        
+        return `
+        <tr data-user-id="${user.id}">
+            <td>${user.first_name} ${user.last_name}</td>
+            <td>${user.phone_number}</td>
+            <td>${user.email || '-'}</td>
+            <td>
+                <span class="badge ${user.is_enabled ? 'badge-success' : 'badge-danger'}">${user.is_enabled ? 'Enabled' : 'Disabled'}</span>
+            </td>
+            <td>
+                <button class="btn btn-small ${user.has_token ? 'btn-success' : 'btn-secondary'}" onclick="openTokenModal(${user.id}, '${escapedName}', ${user.has_token}, ${tokenUpdatedAt ? `'${tokenUpdatedAt}'` : 'null'})">
+                    ${user.has_token ? 'Manage' : 'Upload'}
+                </button>
+            </td>
+            <td>
+                <button class="btn btn-small btn-info" onclick="openEditUserModal(${user.id})">Edit</button>
+                <button class="btn btn-small btn-danger" onclick="confirmDeleteUser(${user.id})">Delete</button>
+            </td>
+        </tr>
+    `;
+    }).join('');
 }
 
-// Placeholder functions
-async function loadAuditLogs() { console.log('📜 Loading audit logs...'); }
-async function loadSettings() { console.log('⚙️  Loading settings...'); }
-
-// ============================================================================
-// Modal and Form Handling
-// ============================================================================
-
-function openTenantModal(tenant = null) {
-    const modal = document.getElementById('tenantModal');
-    const title = document.getElementById('tenantModalTitle');
-    const form = document.getElementById('tenantForm');
-    
-    form.reset();
-    document.getElementById('tenantId').value = '';
-    
-    if (tenant) {
-        title.textContent = 'Edit Tenant';
-        document.getElementById('tenantId').value = tenant.id;
-        document.getElementById('tenantName').value = tenant.name;
-        document.getElementById('tenantStatus').value = tenant.is_active.toString();
-    } else {
-        title.textContent = 'Add Tenant';
-    }
-    
-    modal.style.display = 'block';
+function filterUsers() {
+    // Implement filtering logic here if needed
 }
 
-function openUserModal(user = null) {
-    const modal = document.getElementById('userModal');
-    const title = document.getElementById('userModalTitle');
-    const form = document.getElementById('userForm');
-    
-    form.reset();
-    document.getElementById('userId').value = '';
-    
-    if (user) {
-        title.textContent = 'Edit User';
-        document.getElementById('userId').value = user.id;
-        document.getElementById('userTenant').value = user.tenant_id;
-        document.getElementById('userPhone').value = user.phone_number;
-        document.getElementById('userEmail').value = user.email;
-        document.getElementById('userFirstName').value = user.first_name;
-        document.getElementById('userLastName').value = user.last_name;
-        document.getElementById('userStatus').value = user.is_enabled.toString();
-    } else {
-        title.textContent = 'Add User';
-    }
-    
-    modal.style.display = 'block';
+async function openAddUserModal() {
+    currentEditingUserId = null;
+    document.getElementById('userModalTitle').textContent = 'Add User';
+    document.getElementById('userForm').reset();
+    openModal('userModal');
 }
 
-function closeModal(modalId) {
-    document.getElementById(modalId).style.display = 'none';
-}
-
-async function handleTenantFormSubmit(e) {
-    e.preventDefault();
-    const id = document.getElementById('tenantId').value;
-    const name = document.getElementById('tenantName').value;
-    const is_active = document.getElementById('tenantStatus').value === 'true';
-    
-    const url = id ? `${API_BASE_URL}/admin/tenants/${id}` : `${API_BASE_URL}/admin/tenants`;
-    const method = id ? 'PUT' : 'POST';
+async function openEditUserModal(userId) {
+    currentEditingUserId = userId;
+    document.getElementById('userModalTitle').textContent = 'Edit User';
     
     try {
-        const response = await fetch(url, {
-            method: method,
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${sessionToken}`
-            },
-            body: JSON.stringify({ name, is_active })
+        const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
         });
+        const data = await response.json();
         
-        const result = await response.json();
-        if (result.success) {
-            showAlert(`Tenant ${id ? 'updated' : 'created'} successfully!`, 'success');
-            closeModal('tenantModal');
-            loadTenants();
+        if (data.success) {
+            const user = data.user;
+            document.getElementById('userTenant').value = user.tenant_id;
+            document.getElementById('userFirstName').value = user.first_name;
+            document.getElementById('userLastName').value = user.last_name;
+            document.getElementById('userPhone').value = user.phone_number;
+            document.getElementById('userEmail').value = user.email || '';
+            document.getElementById('userEnabled').checked = user.is_enabled;
+            openModal('userModal');
         } else {
-            showAlert(result.message || 'Failed to save tenant', 'error');
+            showAlert(data.message, 'error');
         }
     } catch (error) {
-        console.error('❌ Error saving tenant:', error);
-        showAlert('An error occurred while saving the tenant', 'error');
+        console.error('Error fetching user details:', error);
+        showAlert('Failed to load user details', 'error');
     }
 }
 
-async function handleUserFormSubmit(e) {
+async function handleSaveUser(e) {
     e.preventDefault();
-    const id = document.getElementById('userId').value;
-    const tenant_id = document.getElementById('userTenant').value;
-    const phone_number = document.getElementById('userPhone').value;
-    const email = document.getElementById('userEmail').value;
-    const first_name = document.getElementById('userFirstName').value;
-    const last_name = document.getElementById('userLastName').value;
-    const is_enabled = document.getElementById('userStatus').value === 'true';
     
-    const url = id ? `${API_BASE_URL}/admin/users/${id}` : `${API_BASE_URL}/admin/users`;
-    const method = id ? 'PUT' : 'POST';
+    const userData = {
+        tenant_id: parseInt(document.getElementById('userTenant').value),
+        first_name: document.getElementById('userFirstName').value,
+        last_name: document.getElementById('userLastName').value,
+        phone_number: document.getElementById('userPhone').value,
+        email: document.getElementById('userEmail').value,
+        is_enabled: document.getElementById('userEnabled').checked
+    };
     
-    const payload = { tenant_id, phone_number, email, first_name, last_name, is_enabled };
+    const url = currentEditingUserId 
+        ? `${API_BASE_URL}/admin/users/${currentEditingUserId}`
+        : `${API_BASE_URL}/admin/users`;
+    
+    const method = currentEditingUserId ? 'PUT' : 'POST';
     
     try {
         const response = await fetch(url, {
@@ -566,21 +384,443 @@ async function handleUserFormSubmit(e) {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${sessionToken}`
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(userData)
         });
         
-        const result = await response.json();
-        if (result.success) {
-            showAlert(`User ${id ? 'updated' : 'created'} successfully!`, 'success');
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`User ${currentEditingUserId ? 'updated' : 'created'} successfully!`, 'success');
             closeModal('userModal');
             loadUsers();
         } else {
-            showAlert(result.message || 'Failed to save user', 'error');
+            showAlert(data.message, 'error');
         }
     } catch (error) {
-        console.error('❌ Error saving user:', error);
-        showAlert('An error occurred while saving the user', 'error');
+        console.error('Error saving user:', error);
+        showAlert('Failed to save user', 'error');
     }
 }
 
-console.log('✅ Admin Dashboard script loaded');
+function confirmDeleteUser(userId) {
+    currentDeleteTarget = { type: 'user', id: userId };
+    document.getElementById('deleteConfirmMessage').textContent = 'Are you sure you want to delete this user?';
+    openModal('deleteConfirmModal');
+}
+
+// ============================================================================
+// Tenant Management
+// ============================================================================
+
+async function loadTenants() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/tenants`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            tenants = data.tenants;
+            displayTenants(tenants);
+        } else {
+            showAlert(data.message, 'error');
+        }
+    } catch (error) {
+        console.error('Error loading tenants:', error);
+        showAlert('Failed to load tenants', 'error');
+    }
+}
+
+function displayTenants(tenantsList) {
+    const tableBody = document.getElementById('tenantsTableBody');
+    tableBody.innerHTML = tenantsList.map(tenant => `
+        <tr>
+            <td>${tenant.company_name}</td>
+            <td>${tenant.email || '-'}</td>
+            <td>${tenant.phone || '-'}</td>
+            <td>${tenant.user_count !== undefined ? tenant.user_count : 'N/A'}</td>
+            <td>
+                <span class="badge ${tenant.active ? 'badge-success' : 'badge-danger'}">${tenant.active ? 'Active' : 'Inactive'}</span>
+            </td>
+            <td>
+                <button class="btn btn-small btn-info" onclick="openEditTenantModal(${tenant.id})">Edit</button>
+                <button class="btn btn-small btn-secondary" onclick="viewTenantUsers(${tenant.id})">View Users</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function viewTenantUsers(tenantId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/tenants/${tenantId}`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const users = data.tenant.users;
+            let message = `<strong>${data.tenant.company_name}</strong><br><br>`;
+            if (users && users.length > 0) {
+                message += `<strong>Users (${users.length}):</strong><br>`;
+                message += users.map(u => `${u.first_name} ${u.last_name} (${u.phone_number})`).join('<br>');
+            } else {
+                message += 'No users found for this tenant.';
+            }
+            
+            showAlert(message, 'info');
+        } else {
+            showAlert(data.message, 'error');
+        }
+    } catch (error) {
+        console.error('Error viewing tenant users:', error);
+        showAlert('Failed to load tenant users', 'error');
+    }
+}
+
+async function loadTenantsForDropdown() {
+    if (tenants.length === 0) {
+        await loadTenants();
+    }
+    
+    const select = document.getElementById('userTenant');
+    select.innerHTML = tenants.map(t => `<option value="${t.id}">${t.company_name}</option>`).join('');
+}
+
+function openEditTenantModal(tenantId) {
+    const tenant = tenants.find(t => t.id === tenantId);
+    if (tenant) {
+        document.getElementById('tenantId').value = tenant.id;
+        document.getElementById('companyName').value = tenant.company_name;
+        document.getElementById('companySlug').value = tenant.company_slug;
+        document.getElementById('tenantEmail').value = tenant.email || '';
+        document.getElementById('tenantPhone').value = tenant.phone || '';
+        document.getElementById('tenantActive').value = tenant.active ? 'true' : 'false';
+        openModal('tenantModal');
+    }
+}
+
+async function handleSaveTenant(e) {
+    e.preventDefault();
+    
+    const tenantId = document.getElementById('tenantId').value;
+    const tenantData = {
+        company_name: document.getElementById('companyName').value,
+        company_slug: document.getElementById('companySlug').value,
+        email: document.getElementById('tenantEmail').value,
+        phone: document.getElementById('tenantPhone').value,
+        is_active: document.getElementById('tenantActive').value === 'true'
+    };
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/tenants/${tenantId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionToken}`
+            },
+            body: JSON.stringify(tenantData)
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert('Tenant updated successfully!', 'success');
+            closeModal('tenantModal');
+            loadTenants();
+        } else {
+            showAlert(data.message, 'error');
+        }
+    } catch (error) {
+        console.error('Error saving tenant:', error);
+        showAlert('Failed to save tenant', 'error');
+    }
+}
+
+// ============================================================================
+// Token Management
+// ============================================================================
+
+let currentTokenUserId = null;
+let currentTokenUserHasToken = false;
+let currentTokenUserData = null;
+
+async function openTokenModal(userId, userName, hasToken, tokenUpdatedAt) {
+    currentTokenUserId = userId;
+    currentEditingUserId = userId;
+    currentTokenUserHasToken = hasToken;
+    
+    document.getElementById('tokenUserName').textContent = userName;
+    document.getElementById('tokenFile').value = '';
+    
+    // Show/hide token info sections based on whether token exists
+    const currentTokenInfo = document.getElementById('currentTokenInfo');
+    const noTokenInfo = document.getElementById('noTokenInfo');
+    
+    if (hasToken) {
+        currentTokenInfo.style.display = 'block';
+        noTokenInfo.style.display = 'none';
+        
+        // Set last updated time
+        const lastUpdated = tokenUpdatedAt ? new Date(tokenUpdatedAt).toLocaleString() : 'Unknown';
+        document.getElementById('tokenLastUpdated').textContent = lastUpdated;
+        document.getElementById('tokenStatus').textContent = 'Active';
+    } else {
+        currentTokenInfo.style.display = 'none';
+        noTokenInfo.style.display = 'block';
+    }
+    
+    openModal('tokenModal');
+}
+
+async function downloadCurrentToken() {
+    if (!currentTokenUserId) return;
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/users/${currentTokenUserId}/token`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success && data.token_data) {
+            // Create a downloadable JSON file
+            const blob = new Blob([JSON.stringify(data.token_data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `google_token_user_${currentTokenUserId}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showAlert('Token downloaded successfully!', 'success');
+        } else {
+            showAlert(data.message || 'Failed to download token', 'error');
+        }
+    } catch (error) {
+        console.error('Error downloading token:', error);
+        showAlert('Failed to download token', 'error');
+    }
+}
+
+async function deleteCurrentToken() {
+    if (!currentTokenUserId) return;
+    
+    if (!confirm('Are you sure you want to delete this token? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/users/${currentTokenUserId}/token`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert('Token deleted successfully!', 'success');
+            closeModal('tokenModal');
+            loadUsers();
+        } else {
+            showAlert(data.message || 'Failed to delete token', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting token:', error);
+        showAlert('Failed to delete token', 'error');
+    }
+}
+
+async function handleTokenUpload() {
+    const fileInput = document.getElementById('tokenFile');
+    if (fileInput.files.length === 0) {
+        showAlert('Please select a file', 'warning');
+        return;
+    }
+    
+    const file = fileInput.files[0];
+    const formData = new FormData();
+    formData.append('token_file', file);
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/users/${currentEditingUserId}/token`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${sessionToken}` },
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert('Token uploaded successfully!', 'success');
+            closeModal('tokenModal');
+            loadUsers();
+        } else {
+            showAlert(data.message, 'error');
+        }
+    } catch (error) {
+        console.error('Error uploading token:', error);
+        showAlert('Failed to upload token', 'error');
+    }
+}
+
+// ============================================================================
+// Settings
+// ============================================================================
+
+async function handleChangePassword(e) {
+    e.preventDefault();
+    
+    const currentPassword = document.getElementById('currentPassword').value;
+    const newPassword = document.getElementById('newPassword').value;
+    const confirmNewPassword = document.getElementById('confirmNewPassword').value;
+    
+    if (newPassword !== confirmNewPassword) {
+        showAlert('New passwords do not match', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionToken}`
+            },
+            body: JSON.stringify({
+                current_password: currentPassword,
+                new_password: newPassword
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert('Password changed successfully!', 'success');
+            document.getElementById('changePasswordForm').reset();
+        } else {
+            showAlert(data.message, 'error');
+        }
+    } catch (error) {
+        console.error('Error changing password:', error);
+        showAlert('Failed to change password', 'error');
+    }
+}
+
+// ============================================================================
+// Audit Logs
+// ============================================================================
+
+async function loadAuditLogs() {
+    const action = document.getElementById('auditFilterAction').value;
+    const entity = document.getElementById('auditFilterEntity').value;
+    
+    let url = `${API_BASE_URL}/admin/audit-logs?`;
+    if (action) url += `action=${action}&`;
+    if (entity) url += `entity_type=${entity}&`;
+    
+    try {
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            displayAuditLogs(data.logs);
+        } else {
+            showAlert(data.message, 'error');
+        }
+    } catch (error) {
+        console.error('Error loading audit logs:', error);
+        showAlert('Failed to load audit logs', 'error');
+    }
+}
+
+function displayAuditLogs(logs) {
+    const tableBody = document.getElementById('auditLogsTableBody');
+    if (logs && logs.length > 0) {
+        tableBody.innerHTML = logs.map(log => `
+            <tr>
+                <td>${log.admin}</td>
+                <td>${log.action}</td>
+                <td>${log.entity_type} ${log.entity_id || ''}</td>
+                <td>${new Date(log.created_at).toLocaleString()}</td>
+            </tr>
+        `).join('');
+    } else {
+        tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No logs found</td></tr>';
+    }
+}
+
+// ============================================================================
+// Generic Deletion
+// ============================================================================
+
+async function confirmDelete() {
+    if (!currentDeleteTarget) return;
+    
+    const { type, id } = currentDeleteTarget;
+    const url = `${API_BASE_URL}/admin/${type}s/${id}`;
+    
+    try {
+        const response = await fetch(url, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`${type.charAt(0).toUpperCase() + type.slice(1)} deleted successfully!`, 'success');
+            if (type === 'user') {
+                loadUsers();
+            }
+        } else {
+            showAlert(data.message, 'error');
+        }
+    } catch (error) {
+        console.error(`Error deleting ${type}:`, error);
+        showAlert(`Failed to delete ${type}`, 'error');
+    }
+    
+    closeModal('deleteConfirmModal');
+    currentDeleteTarget = null;
+}
+
+// ============================================================================
+// Modal & Alert Utilities
+// ============================================================================
+
+function openModal(modalId) {
+    document.getElementById(modalId).classList.add('active');
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).classList.remove('active');
+}
+
+function showAlert(message, type = 'info') {
+    const container = document.getElementById('alertContainer');
+    const alert = document.createElement('div');
+    alert.className = `alert alert-${type}`;
+    
+    let icon = 'info';
+    if (type === 'success') icon = 'check_circle';
+    else if (type === 'error') icon = 'error';
+    else if (type === 'warning') icon = 'warning';
+    
+    alert.innerHTML = `
+        <i class="material-icons">${icon}</i>
+        <span>${message}</span>
+        <button class="close" onclick="this.parentElement.remove()">&times;</button>
+    `;
+    container.appendChild(alert);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (alert.parentElement) {
+            alert.remove();
+        }
+    }, 5000);
+}

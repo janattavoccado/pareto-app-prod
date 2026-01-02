@@ -1,80 +1,46 @@
-import os
-import sys
+'''
+Admin Password Reset Script
+
+This script allows resetting the admin password directly in the database.
+
+Instructions:
+1. Run this script from the root of the project.
+2. Follow the prompts to enter a new password.
+3. The script will update the admin password in the database.
+'''
+
+import getpass
 import logging
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from werkzeug.security import generate_password_hash # Assuming werkzeug is used for hashing
+from pareto_agents.database import get_db_session, Administrator
+from pareto_agents.auth import PasswordManager
 
-# Import necessary models from the application's database module
-try:
-    from pareto_agents.database import Base, Administrator
-except ImportError:
-    print("FATAL: Could not import database models. Ensure you are running this script from the project root.")
-    sys.exit(1)
+logger = logging.getLogger(__name__)
 
-# --- Configuration ---
-ADMIN_USERNAME = "admin"
-# NOTE: The user MUST change this password before running the script
-NEW_PASSWORD = "Rakmackan#1"
-
-# Target: PostgreSQL database (Heroku DATABASE_URL)
-POSTGRES_DB_URL = os.getenv("DATABASE_URL")
-
-if not POSTGRES_DB_URL:
-    print("FATAL: DATABASE_URL environment variable is not set.")
-    print("Please set it to your Heroku PostgreSQL connection string.")
-    sys.exit(1)
-
-# Fix for Heroku's old postgres URL scheme
-if POSTGRES_DB_URL.startswith("postgres://"):
-    POSTGRES_DB_URL = POSTGRES_DB_URL.replace("postgres://", "postgresql://", 1)
-
-# --- Database Engine and Session ---
-engine = create_engine(POSTGRES_DB_URL)
-Session = sessionmaker(bind=engine)
-
-def reset_password():
-    """
-    Resets the password for the admin user, creating the user if it doesn't exist.
-    """
-    print(f"Attempting to connect to database: {POSTGRES_DB_URL.split('@')[-1]}...")
-
-    session = Session()
+def reset_admin_password():
+    '''Resets the admin password in the database.'''
+    session = get_db_session()
     try:
-        # 1. Ensure the administrators table exists
-        Base.metadata.create_all(engine)
+        admin = session.query(Administrator).filter_by(username='admin').first()
+        if not admin:
+            logger.error("❌ Admin user not found.")
+            return
 
-        # 2. Hash the new password
-        hashed_password = generate_password_hash(NEW_PASSWORD)
+        new_password = getpass.getpass("Enter new password for admin: ")
+        if not new_password:
+            logger.error("❌ Password cannot be empty.")
+            return
 
-        # 3. Find or create the admin user
-        admin_user = session.query(Administrator).filter_by(username=ADMIN_USERNAME).first()
-
-        if admin_user:
-            # Update existing user
-            admin_user.password_hash = hashed_password
-            session.commit()
-            print(f"✅ Successfully updated password for existing administrator: '{ADMIN_USERNAME}'")
-        else:
-            # Create new user
-            new_admin = Administrator(
-                username=ADMIN_USERNAME,
-                password_hash=hashed_password,
-                is_active=True
-            )
-            session.add(new_admin)
-            session.commit()
-            print(f"✅ Successfully created new administrator: '{ADMIN_USERNAME}'")
-
-        print(f"NOTE: The new password is set to: '{NEW_PASSWORD}'")
-        print("Please change this password in the script before running it in a real environment.")
+        password_hash = PasswordManager.hash_password(new_password)
+        admin.password_hash = password_hash
+        session.commit()
+        logger.info("✅ Admin password has been reset successfully.")
 
     except Exception as e:
+        logger.error(f"❌ An error occurred: {e}")
         session.rollback()
-        print(f"FATAL ERROR during password reset: {e}")
-        sys.exit(1)
     finally:
         session.close()
 
 if __name__ == "__main__":
-    reset_password()
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    reset_admin_password()

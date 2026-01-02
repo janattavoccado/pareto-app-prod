@@ -1,98 +1,54 @@
-"""
-Token Management Routes API
-
-Provides Flask endpoints for managing user tokens and authentication.
-
-File location: pareto_agents/token_routes.py
-"""
-
-import logging
 from flask import Blueprint, request, jsonify
-
-from .auth import require_auth
 from .database import get_db_session, User
+from .google_token_manager import TokenManager
+import json
 
-logger = logging.getLogger(__name__)
+token_bp = Blueprint("tokens", __name__, url_prefix="/api/tokens")
 
-# Create blueprint
-token_bp = Blueprint("token", __name__, url_prefix="/api/token")
-
-
-# ============================================================================
-# Token Management Endpoints
-# ============================================================================
-
-
-@token_bp.route("/validate", methods=["POST"])
-def validate_token():
-    """
-    Validate a user token
-    """
+@token_bp.route("/users/<int:user_id>/get", methods=["GET"])
+def get_user_token(user_id):
+    session = get_db_session()
     try:
-        data = request.get_json()
+        user = session.query(User).filter_by(id=user_id).first()
+        if not user:
+            return jsonify({"success": False, "message": "User not found"}), 404
         
-        if not data or "token" not in data:
-            return jsonify({
-                "success": False,
-                "message": "Token is required"
-            }), 400
-        
-        token = data.get("token")
-        
-        # Token validation logic would go here
-        logger.info("✅ Token validated")
-        return jsonify({
-            "success": True,
-            "message": "Token is valid"
-        }), 200
-        
-    except Exception as e:
-        logger.error(f"❌ Error validating token: {e}", exc_info=True)
-        return jsonify({
-            "success": False,
-            "message": "An error occurred while validating the token"
-        }), 500
+        if not user.google_token_base64:
+            return jsonify({"success": True, "has_token": False}), 200
 
+        token_info = TokenManager.get_token_info(user.google_token_base64)
+        return jsonify({"success": True, "has_token": True, "token_info": token_info}), 200
+    finally:
+        session.close()
 
-@token_bp.route("/refresh", methods=["POST"])
-@require_auth
-def refresh_token():
-    """
-    Refresh a user token
-    """
+@token_bp.route("/users/<int:user_id>/set", methods=["POST"])
+def set_user_token(user_id):
+    session = get_db_session()
     try:
-        admin_info = request.admin_info
+        user = session.query(User).filter_by(id=user_id).first()
+        if not user:
+            return jsonify({"success": False, "message": "User not found"}), 404
         
-        # Token refresh logic would go here
-        logger.info(f"✅ Token refreshed for admin {admin_info.get('username')}")
-        return jsonify({
-            "success": True,
-            "message": "Token refreshed successfully"
-        }), 200
+        if "file" not in request.files:
+            if request.is_json and "token" in request.json and request.json["token"] is None:
+                user.google_token_base64 = None
+                session.commit()
+                return jsonify({"success": True, "message": "Token deleted successfully"}), 200
+            return jsonify({"success": False, "message": "No file part"}), 400
         
-    except Exception as e:
-        logger.error(f"❌ Error refreshing token: {e}", exc_info=True)
-        return jsonify({
-            "success": False,
-            "message": "An error occurred while refreshing the token"
-        }), 500
-
-
-# ============================================================================
-# Health Check Route
-# ============================================================================
-
-
-@token_bp.route("/health", methods=["GET"])
-def token_health():
-    """
-    Health check endpoint for token API
-    """
-    return jsonify({"status": "healthy", "service": "Token API"}), 200
-
-
-if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    logger.info("Token routes module loaded successfully")
+        file = request.files["file"]
+        if file.filename == "":
+            return jsonify({"success": False, "message": "No selected file"}), 400
+        
+        if file:
+            try:
+                token_data = json.load(file)
+                if not TokenManager.validate_token(token_data):
+                    return jsonify({"success": False, "message": "Invalid token format"}), 400
+                user.google_token_base64 = TokenManager.encode_token(token_data)
+                session.commit()
+                return jsonify({"success": True, "message": "Token updated successfully"}), 200
+            except json.JSONDecodeError:
+                return jsonify({"success": False, "message": "Invalid JSON file"}), 400
+    finally:
+        session.close()

@@ -3,509 +3,415 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pareto Admin</title>
-    <style>
-        * { box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; margin: 0; background-color: #f4f4f4; }
-        .hidden { display: none !important; }
-        .sidebar { width: 200px; background: #333; color: white; position: fixed; height: 100vh; padding-top: 20px; }
-        .sidebar a { display: block; color: white; padding: 15px; text-decoration: none; cursor: pointer; }
-        .sidebar a:hover { background: #555; }
-        .main-content { margin-left: 200px; padding: 20px; }
-        .page { display: none; }
-        .page.active { display: block; }
-        h2 { color: #333; }
-        button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin-bottom: 20px; }
-        button:hover { background: #0056b3; }
-        table { width: 100%; border-collapse: collapse; background: white; }
-        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-        th { background-color: #f2f2f2; font-weight: bold; }
-        tr:hover { background-color: #f9f9f9; }
-        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 1000; }
-        .modal.active { display: flex; }
-        .modal-content { background: white; padding: 30px; border-radius: 5px; width: 500px; max-height: 90vh; overflow-y: auto; }
-        .modal-content h3 { margin-top: 0; }
-        .form-group { margin-bottom: 15px; }
-        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
-        .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px; }
-        .form-buttons { margin-top: 20px; display: flex; gap: 10px; }
-        .form-buttons button { margin: 0; flex: 1; }
-        .btn-danger { background: #dc3545; }
-        .btn-danger:hover { background: #c82333; }
-        .btn-secondary { background: #6c757d; }
-        .btn-secondary:hover { background: #5a6268; }
-        .action-buttons { display: flex; gap: 5px; }
-        .action-buttons button { padding: 5px 10px; font-size: 12px; margin: 0; }
-    </style>
+    <title>Pareto Admin Dashboard</title>
+    
+    <!-- Material Design CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/materialize.min.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/admin_dashboard.css">
 </head>
 <body>
+    <!-- Navigation -->
+    <nav>
+        <div class="nav-wrapper">
+            <span class="brand-logo">
+                <i class="material-icons" style="vertical-align: middle; margin-right: 8px;">dashboard</i>
+                Pareto Admin
+            </span>
+            <div class="nav-right">
+                <i class="material-icons theme-toggle" id="themeToggle" title="Toggle theme">brightness_4</i>
+                <div class="user-info">
+                    <span id="adminName">Admin</span>
+                    <div class="user-avatar" id="userAvatar">A</div>
+                </div>
+                <button class="btn btn-secondary btn-small" id="logoutBtn">
+                    <i class="material-icons" style="font-size: 18px;">logout</i>
+                    Logout
+                </button>
+            </div>
+        </div>
+    </nav>
 
-    <div class="sidebar">
-        <a onclick="showPage('dashboard')">Dashboard</a>
-        <a onclick="showPage('users')">Users</a>
-        <a onclick="showPage('tenants')">Tenants</a>
-    </div>
-
-    <div class="main-content">
-        <!-- Dashboard Page -->
-        <div id="dashboard" class="page active">
-            <h2>Dashboard</h2>
-            <p>Welcome to the Pareto Admin Dashboard.</p>
+    <!-- Main Container -->
+    <div class="container-main" style="display: none;">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-item active" data-page="dashboard">
+                <i class="material-icons">dashboard</i>
+                <span>Dashboard</span>
+            </div>
+            <div class="sidebar-item" data-page="users">
+                <i class="material-icons">people</i>
+                <span>Users</span>
+            </div>
+            <div class="sidebar-item" data-page="tenants">
+                <i class="material-icons">business</i>
+                <span>Tenants</span>
+            </div>
+            <div class="sidebar-item" data-page="audit-logs">
+                <i class="material-icons">history</i>
+                <span>Audit Logs</span>
+            </div>
+            <div class="sidebar-item" data-page="settings">
+                <i class="material-icons">settings</i>
+                <span>Settings</span>
+            </div>
         </div>
 
-        <!-- Users Page -->
-        <div id="users" class="page">
-            <h2>Users</h2>
-            <button onclick="openUserModal()">Add New User</button>
-            <table id="usersTable">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Tenant</th>
-                        <th>Email</th>
-                        <th>Name</th>
-                        <th>Phone</th>
-                        <th>Status</th>
-                        <th>Google Auth</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="usersTableBody"></tbody>
-            </table>
-        </div>
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Alert Container -->
+            <div id="alertContainer"></div>
 
-        <!-- Tenants Page -->
-        <div id="tenants" class="page">
-            <h2>Tenants</h2>
-            <button onclick="openTenantModal()">Add New Tenant</button>
-            <table id="tenantsTable">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Name</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="tenantsTableBody"></tbody>
-            </table>
+            <!-- Dashboard Page -->
+            <div id="dashboardPage" class="page">
+                <div class="page-header">
+                    <h1>Dashboard</h1>
+                </div>
+
+                <div class="stats-grid" id="statsGrid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="totalTenants">0</div>
+                        <div class="stat-label">Total Tenants</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="totalUsers">0</div>
+                        <div class="stat-label">Total Users</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="activeUsers">0</div>
+                        <div class="stat-label">Active Users</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="totalAdmins">0</div>
+                        <div class="stat-label">Total Admins</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2 class="card-title">Recent Activity</h2>
+                    <div id="recentActivityContainer">
+                        <p style="text-align: center; color: #7f8c8d;">No recent activity</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Users Page -->
+            <div id="usersPage" class="page hidden">
+                <div class="page-header">
+                    <h1>Users Management</h1>
+                    <button class="btn btn-primary" id="addUserBtn">
+                        <i class="material-icons">add</i>
+                        Add User
+                    </button>
+                </div>
+                
+                <div class="card">
+                    <div class="filters">
+                        <input type="text" id="userSearchInput" placeholder="Search users...">
+                        <select id="userFilterEnabled">
+                            <option value="">All Statuses</option>
+                            <option value="true">Enabled</option>
+                            <option value="false">Disabled</option>
+                        </select>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Phone</th>
+                                    <th>Email</th>
+                                    <th>Status</th>
+                                    <th>Token</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody">
+                                <!-- User rows will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tenants Page -->
+            <div id="tenantsPage" class="page hidden">
+                <div class="page-header">
+                    <h1>Tenants Management</h1>
+                </div>
+                <div class="card">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Company</th>
+                                    <th>Email</th>
+                                    <th>Phone</th>
+                                    <th>Users</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tenantsTableBody">
+                                <!-- Tenant rows will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Audit Logs Page -->
+            <div id="auditLogsPage" class="page hidden">
+                <div class="page-header">
+                    <h1>Audit Logs</h1>
+                </div>
+                <div class="card">
+                    <div class="filters">
+                        <select id="auditFilterAction">
+                            <option value="">All Actions</option>
+                            <option value="CREATE">Create</option>
+                            <option value="UPDATE">Update</option>
+                            <option value="DELETE">Delete</option>
+                            <option value="LOGIN">Login</option>
+                            <option value="LOGOUT">Logout</option>
+                        </select>
+                        <select id="auditFilterEntity">
+                            <option value="">All Entities</option>
+                            <option value="USER">User</option>
+                            <option value="TENANT">Tenant</option>
+                            <option value="ADMIN">Admin</option>
+                        </select>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Admin</th>
+                                    <th>Action</th>
+                                    <th>Entity</th>
+                                    <th>Date/Time</th>
+                                </tr>
+                            </thead>
+                            <tbody id="auditLogsTableBody">
+                                <!-- Audit log rows will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Page -->
+            <div id="settingsPage" class="page hidden">
+                <div class="page-header">
+                    <h1>Settings</h1>
+                </div>
+                <div class="card">
+                    <h2 class="card-title">Change Password</h2>
+                    <form id="changePasswordForm">
+                        <div class="form-group">
+                            <label for="currentPassword">Current Password</label>
+                            <input type="password" id="currentPassword" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="newPassword">New Password</label>
+                            <input type="password" id="newPassword" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="confirmNewPassword">Confirm New Password</label>
+                            <input type="password" id="confirmNewPassword" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Change Password</button>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
 
     <!-- Login Modal -->
-    <div id="loginModal" class="modal active">
-        <div class="modal-content">
-            <h3>Pareto Admin Login</h3>
-            <form id="loginForm">
-                <div class="form-group">
-                    <label>Username</label>
-                    <input type="text" id="username" required>
-                </div>
-                <div class="form-group">
-                    <label>Password</label>
-                    <input type="password" id="password" required>
-                </div>
-                <div class="form-buttons">
-                    <button type="submit">Login</button>
-                </div>
-            </form>
+    <div id="loginModal" class="modal-overlay active">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Admin Login</h2>
+            </div>
+            <div class="modal-body">
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" required>
+                    </div>
+                    <div id="loginError" class="alert alert-error hidden">
+                        <i class="material-icons">error_outline</i>
+                        <span id="loginErrorMsg"></span>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
+                </form>
+            </div>
         </div>
     </div>
 
     <!-- User Modal -->
-    <div id="userModal" class="modal">
-        <div class="modal-content">
-            <h3 id="userModalTitle">Add User</h3>
-            <form id="userForm">
-                <input type="hidden" id="userId">
+    <div id="userModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="userModalTitle">Add User</h2>
+                <button class="modal-close" onclick="closeModal('userModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="userForm">
+                    <div class="form-group">
+                        <label for="userTenant">Tenant</label>
+                        <select id="userTenant" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="userFirstName">First Name</label>
+                        <input type="text" id="userFirstName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="userLastName">Last Name</label>
+                        <input type="text" id="userLastName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="userPhone">Phone Number</label>
+                        <input type="tel" id="userPhone" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="userEmail">Email</label>
+                        <input type="email" id="userEmail">
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="userEnabled" checked />
+                            <span>Enabled</span>
+                        </label>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('userModal')">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Token Modal -->
+    <div id="tokenModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="tokenModalTitle">Manage Google Token</h2>
+                <button class="modal-close" onclick="closeModal('tokenModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Manage Google credentials for <strong id="tokenUserName"></strong>.</p>
+                
+                <!-- Current Token Info (shown when token exists) -->
+                <div id="currentTokenInfo" class="card" style="margin-bottom: 20px; display: none;">
+                    <h3 style="font-size: 14px; margin-bottom: 10px;">Current Token</h3>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <div>
+                            <span style="color: #7f8c8d;">Status:</span>
+                            <span class="badge badge-success" id="tokenStatus">Active</span>
+                        </div>
+                        <div>
+                            <span style="color: #7f8c8d;">Last Updated:</span>
+                            <span id="tokenLastUpdated">-</span>
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <button type="button" class="btn btn-small btn-info" onclick="downloadCurrentToken()">
+                                <i class="material-icons" style="font-size: 16px;">download</i>
+                                Download Token JSON
+                            </button>
+                            <button type="button" class="btn btn-small btn-danger" onclick="deleteCurrentToken()">
+                                <i class="material-icons" style="font-size: 16px;">delete</i>
+                                Delete Token
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- No Token Info (shown when no token exists) -->
+                <div id="noTokenInfo" class="card" style="margin-bottom: 20px; display: none;">
+                    <p style="color: #7f8c8d; text-align: center;">No token uploaded yet.</p>
+                </div>
+                
+                <!-- Upload New Token -->
                 <div class="form-group">
-                    <label>Tenant</label>
-                    <select id="userTenant" required></select>
+                    <label for="tokenFile">Upload New Credentials JSON File</label>
+                    <input type="file" id="tokenFile" accept=".json">
                 </div>
-                <div class="form-group">
-                    <label>Email</label>
-                    <input type="email" id="userEmail" required>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('tokenModal')">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="handleTokenUpload()">Upload</button>
                 </div>
-                <div class="form-group">
-                    <label>First Name</label>
-                    <input type="text" id="userFirstName">
-                </div>
-                <div class="form-group">
-                    <label>Last Name</label>
-                    <input type="text" id="userLastName">
-                </div>
-                <div class="form-group">
-                    <label>Phone Number</label>
-                    <input type="text" id="userPhone">
-                </div>
-                <div class="form-group">
-                    <label>Status</label>
-                    <select id="userStatus">
-                        <option value="true">Enabled</option>
-                        <option value="false">Disabled</option>
-                    </select>
-                </div>
-                <div id="googleAuthSection" class="hidden">
-                    <h4>Google Authorization</h4>
-                    <p id="googleAuthStatus">Not Authorized</p>
-                    <button type="button" onclick="authorizeGoogle()">Authorize with Google</button>
-                </div>
-                <div class="form-buttons">
-                    <button type="submit">Save</button>
-                    <button type="button" class="btn-secondary" onclick="closeModal('userModal')">Cancel</button>
-                </div>
-            </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteConfirmModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Confirm Deletion</h2>
+            </div>
+            <div class="modal-body">
+                <p id="deleteConfirmMessage"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('deleteConfirmModal')">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+            </div>
         </div>
     </div>
 
     <!-- Tenant Modal -->
-    <div id="tenantModal" class="modal">
-        <div class="modal-content">
-            <h3 id="tenantModalTitle">Add Tenant</h3>
-            <form id="tenantForm">
-                <input type="hidden" id="tenantId">
-                <div class="form-group">
-                    <label>Tenant Name</label>
-                    <input type="text" id="tenantName" required>
-                </div>
-                <div class="form-group">
-                    <label>Status</label>
-                    <select id="tenantStatus">
-                        <option value="true">Active</option>
-                        <option value="false">Inactive</option>
-                    </select>
-                </div>
-                <div class="form-buttons">
-                    <button type="submit">Save</button>
-                    <button type="button" class="btn-secondary" onclick="closeModal('tenantModal')">Cancel</button>
-                </div>
-            </form>
+    <div id="tenantModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="tenantModalTitle">Edit Tenant</h2>
+                <button class="modal-close" onclick="closeModal('tenantModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="tenantForm">
+                    <input type="hidden" id="tenantId">
+                    <div class="form-group">
+                        <label for="companyName">Company Name</label>
+                        <input type="text" id="companyName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="companySlug">Company Slug</label>
+                        <input type="text" id="companySlug" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="tenantEmail">Email</label>
+                        <input type="email" id="tenantEmail">
+                    </div>
+                    <div class="form-group">
+                        <label for="tenantPhone">Phone</label>
+                        <input type="tel" id="tenantPhone">
+                    </div>
+                    <div class="form-group">
+                        <label for="tenantActive">Status</label>
+                        <select id="tenantActive">
+                            <option value="true">Active</option>
+                            <option value="false">Inactive</option>
+                        </select>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('tenantModal')">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
-    <script>
-        const API_BASE_URL = "/api";
-        let sessionToken = null;
-
-        document.addEventListener("DOMContentLoaded", () => {
-            document.getElementById("loginForm").addEventListener("submit", handleLogin);
-            document.getElementById("userForm").addEventListener("submit", handleUserFormSubmit);
-            document.getElementById("tenantForm").addEventListener("submit", handleTenantFormSubmit);
-        });
-
-        // ===== Authentication =====
-        async function handleLogin(e) {
-            e.preventDefault();
-            const username = document.getElementById("username").value;
-            const password = document.getElementById("password").value;
-
-            try {
-                const response = await fetch(`${API_BASE_URL}/auth/login`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ username, password })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    sessionToken = data.session_token;
-                    closeModal("loginModal");
-                    showPage("dashboard");
-                    loadTenants();
-                    loadUsers();
-                } else {
-                    alert("Login failed: " + data.message);
-                }
-            } catch (error) {
-                alert("An error occurred during login.");
-            }
-        }
-
-        // ===== UI Functions =====
-        function showPage(pageId) {
-            document.querySelectorAll(".page").forEach(page => page.classList.remove("active"));
-            document.getElementById(pageId).classList.add("active");
-            
-            if (pageId === "users") loadUsers();
-            if (pageId === "tenants") loadTenants();
-        }
-
-        function closeModal(modalId) {
-            document.getElementById(modalId).classList.remove("active");
-        }
-
-        // ===== Tenants Management =====
-        async function loadTenants() {
-            try {
-                const response = await fetch(`${API_BASE_URL}/admin/tenants`, {
-                    headers: { "Authorization": `Bearer ${sessionToken}` }
-                });
-                const data = await response.json();
-                if (data.success) {
-                    const tbody = document.getElementById("tenantsTableBody");
-                    tbody.innerHTML = "";
-                    data.data.forEach(tenant => {
-                        const row = tbody.insertRow();
-                        row.innerHTML = `
-                            <td>${tenant.id}</td>
-                            <td>${tenant.name}</td>
-                            <td>${tenant.is_active ? "Active" : "Inactive"}</td>
-                            <td>
-                                <div class="action-buttons">
-                                    <button onclick="openTenantModal(${tenant.id})">Edit</button>
-                                    <button class="btn-danger" onclick="deleteTenant(${tenant.id})">Delete</button>
-                                </div>
-                            </td>
-                        `;
-                    });
-                }
-            } catch (error) {
-                console.error("Error loading tenants:", error);
-            }
-        }
-
-        function openTenantModal(tenantId = null) {
-            document.getElementById("tenantId").value = tenantId || "";
-            document.getElementById("tenantName").value = "";
-            document.getElementById("tenantStatus").value = "true";
-            document.getElementById("tenantModalTitle").textContent = tenantId ? "Edit Tenant" : "Add Tenant";
-            
-            if (tenantId) {
-                // Load tenant data
-                fetch(`${API_BASE_URL}/admin/tenants/${tenantId}`, {
-                    headers: { "Authorization": `Bearer ${sessionToken}` }
-                }).then(r => r.json()).then(data => {
-                    if (data.success) {
-                        document.getElementById("tenantName").value = data.data.name;
-                        document.getElementById("tenantStatus").value = data.data.is_active.toString();
-                    }
-                });
-            }
-            
-            document.getElementById("tenantModal").classList.add("active");
-        }
-
-        async function handleTenantFormSubmit(e) {
-            e.preventDefault();
-            const tenantId = document.getElementById("tenantId").value;
-            const name = document.getElementById("tenantName").value;
-            const isActive = document.getElementById("tenantStatus").value === "true";
-
-            const method = tenantId ? "PUT" : "POST";
-            const url = tenantId ? `${API_BASE_URL}/admin/tenants/${tenantId}` : `${API_BASE_URL}/admin/tenants`;
-
-            try {
-                const response = await fetch(url, {
-                    method,
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${sessionToken}`
-                    },
-                    body: JSON.stringify({ name, is_active: isActive })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    alert("Tenant saved successfully");
-                    closeModal("tenantModal");
-                    loadTenants();
-                } else {
-                    alert("Error: " + data.message);
-                }
-            } catch (error) {
-                alert("Error saving tenant");
-            }
-        }
-
-        async function deleteTenant(tenantId) {
-            if (!confirm("Are you sure?")) return;
-            try {
-                const response = await fetch(`${API_BASE_URL}/admin/tenants/${tenantId}`, {
-                    method: "DELETE",
-                    headers: { "Authorization": `Bearer ${sessionToken}` }
-                });
-                const data = await response.json();
-                if (data.success) {
-                    alert("Tenant deleted");
-                    loadTenants();
-                }
-            } catch (error) {
-                alert("Error deleting tenant");
-            }
-        }
-
-        // ===== Users Management =====
-        async function loadUsers() {
-            try {
-                const response = await fetch(`${API_BASE_URL}/admin/users`, {
-                    headers: { "Authorization": `Bearer ${sessionToken}` }
-                });
-                const data = await response.json();
-                if (data.success) {
-                    const tbody = document.getElementById("usersTableBody");
-                    tbody.innerHTML = "";
-                    data.data.forEach(user => {
-                        const row = tbody.insertRow();
-                        row.innerHTML = `
-                            <td>${user.id}</td>
-                            <td>${user.tenant_id}</td>
-                            <td>${user.email}</td>
-                            <td>${user.first_name} ${user.last_name}</td>
-                            <td>${user.phone_number}</td>
-                            <td>${user.is_enabled ? "Enabled" : "Disabled"}</td>
-                            <td>${user.google_token_base64 ? "✓" : "✗"}</td>
-                            <td>
-                                <div class="action-buttons">
-                                    <button onclick="openUserModal(${user.id})">Edit</button>
-                                    <button class="btn-danger" onclick="deleteUser(${user.id})">Delete</button>
-                                </div>
-                            </td>
-                        `;
-                    });
-                }
-            } catch (error) {
-                console.error("Error loading users:", error);
-            }
-        }
-
-        function openUserModal(userId = null) {
-            document.getElementById("userId").value = userId || "";
-            document.getElementById("userEmail").value = "";
-            document.getElementById("userFirstName").value = "";
-            document.getElementById("userLastName").value = "";
-            document.getElementById("userPhone").value = "";
-            document.getElementById("userStatus").value = "true";
-            document.getElementById("userModalTitle").textContent = userId ? "Edit User" : "Add User";
-            
-            // Show/hide Google Auth section
-            if (userId) {
-                document.getElementById("googleAuthSection").classList.remove("hidden");
-                // Load user data
-                fetch(`${API_BASE_URL}/admin/users/${userId}`, {
-                    headers: { "Authorization": `Bearer ${sessionToken}` }
-                }).then(r => r.json()).then(data => {
-                    if (data.success) {
-                        const user = data.data;
-                        document.getElementById("userTenant").value = user.tenant_id;
-                        document.getElementById("userEmail").value = user.email;
-                        document.getElementById("userFirstName").value = user.first_name;
-                        document.getElementById("userLastName").value = user.last_name;
-                        document.getElementById("userPhone").value = user.phone_number;
-                        document.getElementById("userStatus").value = user.is_enabled.toString();
-                        document.getElementById("googleAuthStatus").textContent = user.google_token_base64 ? "Authorized" : "Not Authorized";
-                    }
-                });
-            } else {
-                document.getElementById("googleAuthSection").classList.add("hidden");
-            }
-            
-            // Populate tenant dropdown
-            loadTenantsForSelect();
-            document.getElementById("userModal").classList.add("active");
-        }
-
-        async function loadTenantsForSelect() {
-            try {
-                const response = await fetch(`${API_BASE_URL}/admin/tenants`, {
-                    headers: { "Authorization": `Bearer ${sessionToken}` }
-                });
-                const data = await response.json();
-                if (data.success) {
-                    const select = document.getElementById("userTenant");
-                    select.innerHTML = "";
-                    data.data.forEach(tenant => {
-                        const option = document.createElement("option");
-                        option.value = tenant.id;
-                        option.textContent = tenant.name;
-                        select.appendChild(option);
-                    });
-                }
-            } catch (error) {
-                console.error("Error loading tenants:", error);
-            }
-        }
-
-        async function handleUserFormSubmit(e) {
-            e.preventDefault();
-            const userId = document.getElementById("userId").value;
-            const tenantId = document.getElementById("userTenant").value;
-            const email = document.getElementById("userEmail").value;
-            const firstName = document.getElementById("userFirstName").value;
-            const lastName = document.getElementById("userLastName").value;
-            const phone = document.getElementById("userPhone").value;
-            const isEnabled = document.getElementById("userStatus").value === "true";
-
-            const method = userId ? "PUT" : "POST";
-            const url = userId ? `${API_BASE_URL}/admin/users/${userId}` : `${API_BASE_URL}/admin/users`;
-
-            try {
-                const response = await fetch(url, {
-                    method,
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${sessionToken}`
-                    },
-                    body: JSON.stringify({
-                        tenant_id: tenantId,
-                        email,
-                        first_name: firstName,
-                        last_name: lastName,
-                        phone_number: phone,
-                        is_enabled: isEnabled
-                    })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    alert("User saved successfully");
-                    closeModal("userModal");
-                    loadUsers();
-                } else {
-                    alert("Error: " + data.message);
-                }
-            } catch (error) {
-                alert("Error saving user");
-            }
-        }
-
-        async function deleteUser(userId) {
-            if (!confirm("Are you sure?")) return;
-            try {
-                const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
-                    method: "DELETE",
-                    headers: { "Authorization": `Bearer ${sessionToken}` }
-                });
-                const data = await response.json();
-                if (data.success) {
-                    alert("User deleted");
-                    loadUsers();
-                }
-            } catch (error) {
-                alert("Error deleting user");
-            }
-        }
-
-        // ===== Google OAuth =====
-        async function authorizeGoogle() {
-            const userId = document.getElementById("userId").value;
-            if (!userId) {
-                alert("Please save the user first");
-                return;
-            }
-            
-            try {
-                const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/authorize-google`, {
-                    method: "POST",
-                    headers: { "Authorization": `Bearer ${sessionToken}` }
-                });
-                const data = await response.json();
-                if (data.success) {
-                    alert("Google authorization initiated. Please check your email.");
-                } else {
-                    alert("Error: " + data.message);
-                }
-            } catch (error) {
-                alert("Error authorizing with Google");
-            }
-        }
-    </script>
-
+    <!-- Custom JavaScript -->
+    <script src="/static/admin_dashboard.js"></script>
 </body>
 </html>
