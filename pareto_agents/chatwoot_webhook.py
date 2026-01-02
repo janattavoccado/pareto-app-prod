@@ -85,10 +85,46 @@ def webhook_handler(payload):
         is_audio = any(att.get("file_type") == "audio" for att in attachments)
 
         message_to_process = content
+        
+        # Handle audio messages - transcribe using OpenAI Whisper
         if is_audio:
-            # Audio processing logic (placeholder)
-            # In production, this would transcribe the audio
-            pass
+            logger.info("Audio message detected, starting transcription...")
+            try:
+                from .audio_transcriber import AudioTranscriber, extract_audio_from_payload
+                
+                # Extract audio URL from payload
+                audio_url = extract_audio_from_payload(payload)
+                
+                if audio_url:
+                    # Transcribe the audio
+                    transcriber = AudioTranscriber()
+                    transcribed_text = transcriber.transcribe_from_url(audio_url)
+                    
+                    if transcribed_text:
+                        logger.info(f"Audio transcribed successfully: {transcribed_text[:100]}...")
+                        message_to_process = transcribed_text
+                    else:
+                        logger.warning("Audio transcription returned empty text")
+                        ChatwootClient().send_message(
+                            conversation_id=conversation_id,
+                            message_text="❌ I couldn't understand the audio message. Please try again or send a text message."
+                        )
+                        return {"status": "transcription_empty"}
+                else:
+                    logger.warning("Could not extract audio URL from payload")
+                    ChatwootClient().send_message(
+                        conversation_id=conversation_id,
+                        message_text="❌ I couldn't process the audio message. Please try again."
+                    )
+                    return {"status": "audio_url_missing"}
+                    
+            except Exception as e:
+                logger.error(f"Audio transcription failed: {e}", exc_info=True)
+                ChatwootClient().send_message(
+                    conversation_id=conversation_id,
+                    message_text="❌ I had trouble processing your voice message. Please try again or send a text message."
+                )
+                return {"status": "transcription_error", "error": str(e)}
 
         if not message_to_process:
             logger.warning("No content to process after handling attachments.")
