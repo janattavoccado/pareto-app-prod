@@ -16,6 +16,7 @@ from openai import OpenAI
 from .google_calendar_client import GoogleCalendarClient
 from .user_manager_db_v2 import get_user_manager
 from .timezone_service import TimezoneService
+from .config_loader_v2 import get_google_user_token_by_phone
 
 logger = logging.getLogger(__name__)
 
@@ -107,19 +108,20 @@ class CalendarActionExecutor:
         self._initialize_calendar_client()
 
     def _initialize_calendar_client(self) -> None:
-        """Initialize Google Calendar client for the user"""
+        """Initialize Google Calendar client for the user using database token"""
         try:
-            # Get token path using correct UserManager API
-            token_path = self.user_manager.get_google_token_path(self.user_phone)
-            if not token_path:
-                logger.error(f"No token path for user {self.user_phone}")
+            # Get token data from database (not file path)
+            token_data = get_google_user_token_by_phone(self.user_phone)
+            if not token_data:
+                logger.error(f"No Google token found in database for user {self.user_phone}")
                 return
 
-            self.calendar_client = GoogleCalendarClient(token_path)
-            logger.info(f"Calendar client initialized for {self.user_phone}")
+            # Pass token data directly to GoogleCalendarClient
+            self.calendar_client = GoogleCalendarClient(token_data)
+            logger.info(f"Calendar client initialized for {self.user_phone} using database token")
 
         except Exception as e:
-            logger.error(f"Error initializing calendar client: {str(e)}")
+            logger.error(f"Error initializing calendar client: {str(e)}", exc_info=True)
 
     def execute_action(self, response: Any) -> ActionResult:
         """

@@ -240,6 +240,89 @@ class MailMeHandler:
         )
 
 
+    @staticmethod
+    def send_mail_me_email(phone_number: str, mail_me_request: 'MailMeRequest') -> bool:
+        """
+        Send the mail me email using the user's Google credentials from the database.
+        
+        Args:
+            phone_number (str): User's phone number to look up credentials
+            mail_me_request (MailMeRequest): The structured email request
+            
+        Returns:
+            bool: True if email sent successfully, False otherwise
+        """
+        try:
+            from .config_loader_v2 import get_google_user_token_by_phone
+            
+            # Get user's Google token from database
+            token = get_google_user_token_by_phone(phone_number)
+            
+            if not token:
+                logger.error(f"No Google token found for user: {phone_number}")
+                return False
+            
+            # Authenticate using token data directly
+            from google.oauth2.credentials import Credentials as UserCredentials
+            from google.auth.transport.requests import Request
+            import googleapiclient.discovery
+            import base64
+            from email.mime.text import MIMEText
+            
+            SCOPES = [
+                'https://www.googleapis.com/auth/gmail.readonly',
+                'https://www.googleapis.com/auth/gmail.send',
+                'https://www.googleapis.com/auth/gmail.modify'
+            ]
+            
+            credentials = UserCredentials.from_authorized_user_info(token, SCOPES)
+            
+            # Refresh token if expired
+            if credentials.expired and credentials.refresh_token:
+                request_obj = Request()
+                credentials.refresh(request_obj)
+                logger.info(f"Token refreshed for MailMe email send")
+            
+            # Build Gmail service
+            service = googleapiclient.discovery.build(
+                'gmail', 'v1', credentials=credentials
+            )
+            
+            # Create MIME message
+            message = MIMEText(mail_me_request.body)
+            message['to'] = mail_me_request.recipient_email
+            message['subject'] = mail_me_request.subject
+            
+            # Encode message
+            raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+            send_message = {'raw': raw_message}
+            
+            logger.info(f"Attempting to send MailMe email to {mail_me_request.recipient_email}")
+            
+            # Send email via Gmail API
+            result = service.users().messages().send(
+                userId='me',
+                body=send_message
+            ).execute()
+            
+            # Verify result
+            if result and 'id' in result:
+                message_id = result['id']
+                logger.info(
+                    f"✅ MailMe email sent successfully to {mail_me_request.recipient_email} | "
+                    f"Subject: {mail_me_request.subject} | "
+                    f"Message ID: {message_id}"
+                )
+                return True
+            else:
+                logger.error(f"Gmail API returned unexpected response: {result}")
+                return False
+            
+        except Exception as e:
+            logger.error(f"Error sending MailMe email: {str(e)}", exc_info=True)
+            return False
+
+
 # Example usage
 if __name__ == "__main__":
     # Test mail me handler

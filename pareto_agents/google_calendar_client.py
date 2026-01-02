@@ -1,7 +1,8 @@
 """
 Google Calendar Client for managing calendar events
 Uses timezone_service for timezone handling (NO ZoneInfo)
-Supports Base64 environment variables for Heroku and local files for development
+Supports Base64 environment variables for Heroku, local files for development,
+and direct token data from database
 """
 
 import logging
@@ -9,7 +10,7 @@ import os
 import json
 import base64
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 from google.oauth2.service_account import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
@@ -22,24 +23,58 @@ class GoogleCalendarClient:
     """
     Google Calendar API client for creating and managing events
     Uses TimezoneService for timezone handling
-    Supports both Base64 env vars (Heroku) and file paths (Local)
+    Supports Base64 env vars (Heroku), file paths (Local), and direct token data (Database)
     """
     
     TIMEZONE_CET = "Europe/Zagreb"
     SCOPES = ["https://www.googleapis.com/auth/calendar"]
     
-    def __init__(self, token_data: Dict[str, Any]):
+    def __init__(self, token_source: Union[str, Dict[str, Any]]):
         """
         Initialize Google Calendar client
         
         Args:
-            token_path (str): Path to OAuth2 token file (or env var name for Heroku)
+            token_source: Either:
+                - str: Path to OAuth2 token file (or env var name for Heroku)
+                - dict: Token data directly (from database)
         """
-        self.token_data = token_data
+        self.token_source = token_source
         self.service = None
         self._initialize_service()
     
-    
+    def _load_token_data(self) -> Dict[str, Any]:
+        """
+        Load token data from either Base64 env var, file, or use direct dict
+        
+        Returns:
+            dict: Token data
+        """
+        # If token_source is already a dict, use it directly (from database)
+        if isinstance(self.token_source, dict):
+            logger.info("✅ Using token data directly from database")
+            return self.token_source
+        
+        # Try to load from Base64 environment variable first (Heroku)
+        if self.token_source == 'GOOGLE_USER_TOKEN_JSON':
+            env_value = os.getenv('GOOGLE_USER_TOKEN_JSON')
+            if env_value:
+                try:
+                    decoded = base64.b64decode(env_value).decode('utf-8')
+                    token_data = json.loads(decoded)
+                    logger.info("✅ Loaded Google User Token from Base64 environment variable")
+                    return token_data
+                except Exception as e:
+                    logger.error(f"❌ Error decoding GOOGLE_USER_TOKEN_JSON: {e}")
+        
+        # Fall back to file path (Local development)
+        try:
+            with open(self.token_source, 'r') as f:
+                token_data = json.load(f)
+            logger.info(f"✅ Loaded Google User Token from file: {self.token_source}")
+            return token_data
+        except Exception as e:
+            logger.error(f"❌ Error loading token from file {self.token_source}: {e}")
+            raise
     
     def _initialize_service(self) -> None:
         """Initialize Google Calendar service with OAuth2 token"""
@@ -48,14 +83,14 @@ class GoogleCalendarClient:
             from google.auth.transport.requests import Request
             
             # Load token data
-            token_data = self.token_data
+            token_data = self._load_token_data()
             
             creds = Credentials.from_authorized_user_info(token_data, self.SCOPES)
             
             # Refresh token if expired
-            if creds and creds.expired and creds.refresh_token:
+            if creds.expired and creds.refresh_token:
                 creds.refresh(Request())
-                logger.info("Token refreshed successfully")
+                logger.info(f"Token refreshed for calendar client")
             
             # Build service
             self.service = build('calendar', 'v3', credentials=creds)
