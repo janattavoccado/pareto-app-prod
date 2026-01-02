@@ -1,5 +1,5 @@
 """
-Pareto Agents - OpenAI Agents SDK Integration for Pareto
+Pareto Agents - OpenAI Agents SDK Integration for Pareto app
 Updated with improved routing logic for Email, Calendar, and Personal Assistant agents
 
 File location: pareto_agents/agents.py

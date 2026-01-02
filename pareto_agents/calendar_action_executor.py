@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from openai import OpenAI
 
 from .google_calendar_client import GoogleCalendarClient
-from .user_manager import get_user_manager
+from .user_manager_db_v2 import get_user_manager
 from .timezone_service import TimezoneService
 
 logger = logging.getLogger(__name__)
