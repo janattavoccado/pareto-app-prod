@@ -318,6 +318,17 @@ def get_user_manager_db_v2() -> UserManagerDBv2:
     return _user_manager_instance
 
 
+# Alias for backward compatibility
+def get_user_manager() -> UserManagerDBv2:
+    """
+    Alias for get_user_manager_db_v2() for backward compatibility
+    
+    Returns:
+        UserManagerDBv2 instance
+    """
+    return get_user_manager_db_v2()
+
+
 if __name__ == '__main__':
     # Test user manager
     logging.basicConfig(
