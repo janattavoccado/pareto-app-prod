@@ -2,13 +2,12 @@
 Chatwoot Webhook Handler - Final Version
 
 Handles incoming messages from Chatwoot, authorizes users, and routes messages
-to the appropriate agent handler (MailMe, Personal Assistant, or Triage).
+to the appropriate agent handler (MailMe, Calendar, Email, or Personal Assistant).
 
 File location: pareto_agents/chatwoot_webhook.py
 """
 
 import logging
-import re
 from flask import Blueprint, request, jsonify
 
 from .user_manager_db_v2 import get_user_manager
@@ -22,26 +21,6 @@ logger = logging.getLogger(__name__)
 
 # Create blueprint
 chatwoot_bp = Blueprint("chatwoot", __name__, url_prefix="/api/chatwoot")
-
-
-# ============================================================================
-# Action Detection
-# ============================================================================
-
-def _detect_action_type(response_text: str) -> str:
-    """
-    Detects if the agent response indicates a calendar or email action.
-    This is used for simple, direct actions, not complex tasks.
-    """
-    # Use word boundaries to avoid matching substrings
-    calendar_keywords = r"\b(calendar|event|meeting|appointment|schedule|book|create|update|delete|reschedule|cancel)\b"
-    email_keywords = r"\b(email|mail|send|compose|inbox|unread|subject|recipient)\b"
-
-    if re.search(calendar_keywords, response_text, re.IGNORECASE):
-        return "calendar"
-    if re.search(email_keywords, response_text, re.IGNORECASE):
-        return "email"
-    return "none"
 
 
 # ============================================================================
@@ -65,6 +44,8 @@ def webhook_handler(payload):
     """
     Main Chatwoot webhook handler.
     """
+    conversation_id = None
+    
     try:
         if not payload:
             logger.warning("Empty webhook payload received.")
@@ -105,8 +86,9 @@ def webhook_handler(payload):
 
         message_to_process = content
         if is_audio:
-            # (Audio processing logic remains the same)
-            pass # Placeholder for brevity
+            # Audio processing logic (placeholder)
+            # In production, this would transcribe the audio
+            pass
 
         if not message_to_process:
             logger.warning("No content to process after handling attachments.")
@@ -126,45 +108,102 @@ def webhook_handler(payload):
         # --- Response Handling ---
         action_type = agent_result.get("action_type", "none")
         agent_response = agent_result.get("agent_response", "")
-
-        # The new agent architecture handles actions internally for complex tasks.
-        # The old action execution logic is kept for simple, direct calendar/email tasks.
-
-        # Handle MailMe separately as it has direct email sending logic here
-        if action_type == "mail_me":
-            # (MailMe handling logic remains the same)
-            pass # Placeholder for brevity
-
-        # For other agent responses, send them back to the user.
-        # The Personal Assistant formats its own responses.
-        # The Triage agent response might trigger a simple action executor.
         
-        final_response = agent_response
-        
-        # Detect if a simple action needs to be executed based on Triage response
-        simple_action = _detect_action_type(agent_response)
+        logger.info(f"Agent action type: {action_type}")
 
-        if simple_action == "calendar":
-            logger.info("Detected simple calendar action to execute.")
+        # Handle MailMe action
+        if action_type == "mail_me" and agent_result.get("mail_me_request"):
+            logger.info("Processing MailMe action.")
+            try:
+                from .mail_me_handler import MailMeHandler
+                mail_me_request = agent_result.get("mail_me_request")
+                
+                # Send the email
+                success = MailMeHandler.send_mail_me_email(
+                    phone_number=phone_number,
+                    mail_me_request=mail_me_request
+                )
+                
+                if success:
+                    final_response = agent_response
+                else:
+                    final_response = "❌ Failed to send the email. Please try again."
+                    
+            except Exception as e:
+                logger.error(f"MailMe action failed: {e}", exc_info=True)
+                final_response = f"❌ Error sending email: {str(e)}"
+        
+        # Handle Calendar action (booking, creating, updating, deleting)
+        elif action_type == "calendar":
+            logger.info("Processing Calendar action.")
             try:
                 from .calendar_action_executor import CalendarActionExecutor
                 executor = CalendarActionExecutor(phone_number)
-                action_result = executor.execute_action(agent_result.get("raw_result"))
-                if hasattr(action_result, "response") and action_result.response:
-                    final_response = _format_action_response(action_result, user_data)
+                action_result_obj = executor.execute_action(agent_result.get("raw_result"))
+                
+                if hasattr(action_result_obj, "response") and action_result_obj.response:
+                    final_response = action_result_obj.response
+                else:
+                    final_response = agent_response
+                    
             except Exception as e:
-                logger.error(f"Simple calendar action failed: {e}", exc_info=True)
+                logger.error(f"Calendar action failed: {e}", exc_info=True)
+                final_response = agent_response  # Fall back to agent response
         
-        elif simple_action == "email":
-            logger.info("Detected simple email action to execute.")
+        # Handle Email action (sending, composing)
+        elif action_type == "email":
+            logger.info("Processing Email action.")
             try:
                 from .email_action_executor import EmailActionExecutor
                 executor = EmailActionExecutor(phone_number)
-                action_result = executor.execute_action(agent_result.get("raw_result"))
-                if hasattr(action_result, "response") and action_result.response:
-                    final_response = _format_action_response(action_result, user_data)
+                action_result_obj = executor.execute_action(agent_result.get("raw_result"))
+                
+                if hasattr(action_result_obj, "response") and action_result_obj.response:
+                    final_response = action_result_obj.response
+                else:
+                    final_response = agent_response
+                    
             except Exception as e:
-                logger.error(f"Simple email action failed: {e}", exc_info=True)
+                logger.error(f"Email action failed: {e}", exc_info=True)
+                final_response = agent_response  # Fall back to agent response
+        
+        # Handle Personal Assistant response (queries, summaries, greetings)
+        elif action_type == "personal_assistant":
+            logger.info("Processing Personal Assistant response.")
+            # For queries and summaries, we may need to execute calendar/email reads
+            try:
+                # Check if the response indicates calendar information is needed
+                if _needs_calendar_data(message_to_process):
+                    from .calendar_action_executor import CalendarActionExecutor
+                    executor = CalendarActionExecutor(phone_number)
+                    action_result_obj = executor.execute_action(agent_result.get("raw_result"))
+                    
+                    if hasattr(action_result_obj, "response") and action_result_obj.response:
+                        final_response = action_result_obj.response
+                    else:
+                        final_response = agent_response
+                        
+                # Check if the response indicates email information is needed
+                elif _needs_email_data(message_to_process):
+                    from .email_action_executor import EmailActionExecutor
+                    executor = EmailActionExecutor(phone_number)
+                    action_result_obj = executor.execute_action(agent_result.get("raw_result"))
+                    
+                    if hasattr(action_result_obj, "response") and action_result_obj.response:
+                        final_response = action_result_obj.response
+                    else:
+                        final_response = agent_response
+                else:
+                    # General conversation or greeting
+                    final_response = agent_response
+                    
+            except Exception as e:
+                logger.error(f"Personal Assistant action failed: {e}", exc_info=True)
+                final_response = agent_response  # Fall back to agent response
+        
+        else:
+            # Default: use agent response directly
+            final_response = agent_response
 
         # Send the final response to Chatwoot
         if final_response:
@@ -189,3 +228,43 @@ def webhook_handler(payload):
         except Exception as notify_e:
             logger.error(f"Failed to send error notification to user: {notify_e}")
         return {"status": "error", "message": str(e)}
+
+
+def _needs_calendar_data(message: str) -> bool:
+    """
+    Check if the message is asking for calendar information
+    """
+    message_lower = message.lower()
+    calendar_query_keywords = [
+        'meeting', 'meetings', 'schedule', 'calendar', 'event', 'events',
+        'appointment', 'appointments', 'agenda', 'today', 'tomorrow',
+        'this week', 'next week', 'what do i have', 'what\'s on',
+        'show me my', 'list my'
+    ]
+    return any(keyword in message_lower for keyword in calendar_query_keywords)
+
+
+def _needs_email_data(message: str) -> bool:
+    """
+    Check if the message is asking for email information
+    """
+    message_lower = message.lower()
+    email_query_keywords = [
+        'email', 'emails', 'mail', 'inbox', 'unread', 'messages',
+        'summarize', 'summary', 'new emails', 'recent emails'
+    ]
+    return any(keyword in message_lower for keyword in email_query_keywords)
+
+
+# ============================================================================
+# Blueprint Route
+# ============================================================================
+
+@chatwoot_bp.route("/webhook", methods=["POST"])
+def chatwoot_webhook():
+    """
+    Flask route for Chatwoot webhook
+    """
+    payload = request.get_json()
+    result = webhook_handler(payload)
+    return jsonify(result)
