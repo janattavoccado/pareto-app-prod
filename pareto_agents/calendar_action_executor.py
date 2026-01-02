@@ -311,36 +311,92 @@ class CalendarActionExecutor:
             )
 
     def _execute_list_events(self, response_text: str) -> ActionResult:
-        """Execute list events action"""
+        """Execute list events action - fetches and formats today's calendar events"""
         try:
-            event_request = self._parse_list_events(response_text)
-
+            from datetime import datetime, timedelta
+            
+            # Determine time range from response text
+            response_lower = response_text.lower()
+            
+            # Set time range based on keywords in the request
+            now = datetime.utcnow()
+            if 'tomorrow' in response_lower:
+                time_min = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+                time_max = time_min + timedelta(days=1)
+                time_label = "tomorrow"
+            elif 'this week' in response_lower or 'week' in response_lower:
+                time_min = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                time_max = time_min + timedelta(days=7)
+                time_label = "this week"
+            else:  # Default to today
+                time_min = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                time_max = time_min + timedelta(days=1)
+                time_label = "today"
+            
+            logger.info(f"Fetching calendar events for {time_label}: {time_min} to {time_max}")
+            
+            # Fetch events from Google Calendar
             result = self.calendar_client.get_events(
-                max_results=event_request.max_results
+                time_min=time_min,
+                time_max=time_max,
+                max_results=20
             )
 
             if result.get('success'):
                 events = result.get('events', [])
-                response_msg = f"✅ Found {len(events)} upcoming events"
+                logger.info(f"Retrieved {len(events)} events from calendar")
+                
+                if not events:
+                    response_msg = f"📅 You have no events scheduled for {time_label}."
+                else:
+                    response_msg = f"📅 *Your {time_label}'s schedule ({len(events)} event(s)):*\n\n"
+                    
+                    for i, event in enumerate(events, 1):
+                        title = event.get('summary', 'No title')
+                        location = event.get('location', '')
+                        start = event.get('start', {}).get('dateTime', event.get('start', {}).get('date', 'Unknown'))
+                        end = event.get('end', {}).get('dateTime', event.get('end', {}).get('date', ''))
+                        
+                        # Format the time nicely
+                        try:
+                            if 'T' in start:
+                                dt_start = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                                time_str = dt_start.strftime('%H:%M')
+                                if end and 'T' in end:
+                                    dt_end = datetime.fromisoformat(end.replace('Z', '+00:00'))
+                                    time_str += f" - {dt_end.strftime('%H:%M')}"
+                            else:
+                                time_str = 'All day'
+                        except Exception as e:
+                            logger.warning(f"Error formatting time: {e}")
+                            time_str = start
+                        
+                        response_msg += f"{i}. *{title}*\n   🕐 {time_str}"
+                        if location:
+                            response_msg += f"\n   📍 {location}"
+                        response_msg += "\n\n"
+                
                 return ActionResult(
                     action='list_events',
                     success=True,
-                    response=response_msg,
+                    response=response_msg.strip(),
                     data=result
                 )
             else:
+                error_msg = result.get('error', 'Unknown error')
+                logger.error(f"Failed to list events: {error_msg}")
                 return ActionResult(
                     action='list_events',
                     success=False,
-                    response=f"Failed to list events: {result.get('error', 'Unknown error')}"
+                    response=f"❌ Failed to retrieve calendar events: {error_msg}"
                 )
 
         except Exception as e:
-            logger.error(f"Error listing events: {str(e)}")
+            logger.error(f"Error listing events: {str(e)}", exc_info=True)
             return ActionResult(
                 action='list_events',
                 success=False,
-                response=f'Error listing events: {str(e)}'
+                response=f'❌ Error listing events: {str(e)}'
             )
 
     def query_events(self, time_range: str = 'today') -> ActionResult:

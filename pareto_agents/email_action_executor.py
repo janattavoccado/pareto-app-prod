@@ -422,19 +422,51 @@ class EmailActionExecutor:
                     data={"count": 0, "emails": []}
                 )
             
-            # Format email summaries
+            # Format email summaries with content snippets
             email_summaries = []
             for i, email in enumerate(emails, 1):
                 sender = email.get('from', 'Unknown')
+                # Extract just the name part if it's in "Name <email>" format
+                if '<' in sender:
+                    sender_name = sender.split('<')[0].strip().strip('"')
+                    if not sender_name:
+                        sender_name = sender.split('<')[1].split('>')[0]
+                else:
+                    sender_name = sender
                 # Truncate long sender names
-                if len(sender) > 40:
-                    sender = sender[:37] + "..."
-                subject = email.get('subject', 'No Subject')
-                if len(subject) > 50:
-                    subject = subject[:47] + "..."
-                snippet = email.get('snippet', '')[:100]
+                if len(sender_name) > 35:
+                    sender_name = sender_name[:32] + "..."
                 
-                email_summaries.append(f"{i}. *From:* {sender}\n   *Subject:* {subject}")
+                subject = email.get('subject', 'No Subject')
+                if len(subject) > 60:
+                    subject = subject[:57] + "..."
+                
+                # Include snippet (preview of email content)
+                snippet = email.get('snippet', '')
+                if snippet:
+                    # Clean up snippet - remove extra whitespace
+                    snippet = ' '.join(snippet.split())
+                    if len(snippet) > 100:
+                        snippet = snippet[:97] + "..."
+                    snippet_line = f"\n   📝 _{snippet}_"
+                else:
+                    snippet_line = ""
+                
+                # Get date if available
+                date = email.get('date', '')
+                date_str = ""
+                if date:
+                    try:
+                        # Parse and format date nicely
+                        from email.utils import parsedate_to_datetime
+                        dt = parsedate_to_datetime(date)
+                        date_str = f" ({dt.strftime('%d %b %H:%M')})"
+                    except:
+                        pass
+                
+                email_summaries.append(
+                    f"{i}. *{subject}*{date_str}\n   👤 From: {sender_name}{snippet_line}"
+                )
             
             response_msg = f"📧 *Your {len(emails)} most recent emails:*\n\n" + "\n\n".join(email_summaries)
             
