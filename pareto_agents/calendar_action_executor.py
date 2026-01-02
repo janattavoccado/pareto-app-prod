@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from openai import OpenAI
 
 from .google_calendar_client import GoogleCalendarClient
-from .config_loader_v2 import get_google_user_token_by_phone
+from .user_manager import get_user_manager
 from .timezone_service import TimezoneService
 
 logger = logging.getLogger(__name__)
@@ -100,7 +100,7 @@ class CalendarActionExecutor:
             user_phone (str): User phone number
         """
         self.user_phone = user_phone
-        
+        self.user_manager = get_user_manager()
         self.timezone_service = TimezoneService()
         self.calendar_client = None
         self.llm_client = OpenAI()  # Uses OPENAI_API_KEY env var
@@ -110,12 +110,12 @@ class CalendarActionExecutor:
         """Initialize Google Calendar client for the user"""
         try:
             # Get token path using correct UserManager API
-            token = get_google_user_token_by_phone(self.user_phone)
-            if not token:
-                logger.error(f"No Google token found in database for user {self.user_phone}")
+            token_path = self.user_manager.get_google_token_path(self.user_phone)
+            if not token_path:
+                logger.error(f"No token path for user {self.user_phone}")
                 return
             
-            self.calendar_client = GoogleCalendarClient(token)
+            self.calendar_client = GoogleCalendarClient(token_path)
             logger.info(f"Calendar client initialized for {self.user_phone}")
         
         except Exception as e:
@@ -339,6 +339,85 @@ class CalendarActionExecutor:
                 action='list_events',
                 success=False,
                 response=f'Error listing events: {str(e)}'
+            )
+    
+    def query_events(self, time_range: str = 'today') -> ActionResult:
+        """
+        Query calendar events for a specific time range.
+        This method is for calendar QUERIES, not actions.
+        
+        Args:
+            time_range: 'today', 'tomorrow', 'this_week', 'upcoming'
+            
+        Returns:
+            ActionResult with formatted event list
+        """
+        try:
+            from datetime import datetime, timedelta
+            
+            now = datetime.utcnow()
+            
+            if time_range == 'today':
+                time_min = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                time_max = time_min + timedelta(days=1)
+            elif time_range == 'tomorrow':
+                time_min = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+                time_max = time_min + timedelta(days=1)
+            elif time_range == 'this_week':
+                time_min = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                time_max = time_min + timedelta(days=7)
+            else:  # upcoming
+                time_min = now
+                time_max = None
+            
+            result = self.calendar_client.get_events(
+                time_min=time_min,
+                time_max=time_max,
+                max_results=20
+            )
+            
+            if result.get('success'):
+                events = result.get('events', [])
+                
+                if not events:
+                    response_msg = f"📅 You have no events scheduled for {time_range.replace('_', ' ')}."
+                else:
+                    response_msg = f"📅 **Your {time_range.replace('_', ' ')} schedule:**\n\n"
+                    for event in events:
+                        title = event.get('summary', 'No title')
+                        start = event.get('start', {}).get('dateTime', event.get('start', {}).get('date', 'Unknown'))
+                        
+                        # Format the time nicely
+                        try:
+                            if 'T' in start:
+                                dt = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                                time_str = dt.strftime('%H:%M')
+                            else:
+                                time_str = 'All day'
+                        except:
+                            time_str = start
+                        
+                        response_msg += f"• **{time_str}** - {title}\n"
+                
+                return ActionResult(
+                    action='query_events',
+                    success=True,
+                    response=response_msg,
+                    data=result
+                )
+            else:
+                return ActionResult(
+                    action='query_events',
+                    success=False,
+                    response=f"Failed to get events: {result.get('error', 'Unknown error')}"
+                )
+        
+        except Exception as e:
+            logger.error(f"Error querying events: {str(e)}", exc_info=True)
+            return ActionResult(
+                action='query_events',
+                success=False,
+                response=f'Error querying events: {str(e)}'
             )
     
     def _extract_response_text(self, response: Any) -> str:
