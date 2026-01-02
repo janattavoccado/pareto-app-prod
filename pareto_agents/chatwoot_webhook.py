@@ -87,7 +87,7 @@ def webhook_handler(payload):
         user_manager = get_user_manager()
         user_data = user_manager.get_user_by_phone(phone_number)
 
-        if not user_data or not user_data.get("enabled"):
+        if not user_data or not user_data.get("is_enabled"):
             logger.warning(f"Unauthorized access attempt from {phone_number}")
             ChatwootClient().send_message(
                 conversation_id=conversation_id,
@@ -95,7 +95,7 @@ def webhook_handler(payload):
             )
             return {"status": "unauthorized"}
 
-        user_name = f"{user_data.get("first_name")} {user_data.get("last_name")}"
+        user_name = f"{user_data.get('first_name')} {user_data.get('last_name')}"
         logger.info(f"Processing message from authorized user: {user_name} ({phone_number})")
 
         # --- Message Content Processing ---
