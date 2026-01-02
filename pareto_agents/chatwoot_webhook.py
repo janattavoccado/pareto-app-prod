@@ -1,5 +1,5 @@
 """
-Chatwoot Webhook Handler - Final Version
+Chatwoot Webhook Handler -
 
 Handles incoming messages from Chatwoot, authorizes users, and routes messages
 to the appropriate agent handler (MailMe, Calendar, Email, or Personal Assistant).
@@ -45,7 +45,7 @@ def webhook_handler(payload):
     Main Chatwoot webhook handler.
     """
     conversation_id = None
-    
+
     try:
         if not payload:
             logger.warning("Empty webhook payload received.")
@@ -108,7 +108,7 @@ def webhook_handler(payload):
         # --- Response Handling ---
         action_type = agent_result.get("action_type", "none")
         agent_response = agent_result.get("agent_response", "")
-        
+
         logger.info(f"Agent action type: {action_type}")
 
         # Handle MailMe action
@@ -117,22 +117,22 @@ def webhook_handler(payload):
             try:
                 from .mail_me_handler import MailMeHandler
                 mail_me_request = agent_result.get("mail_me_request")
-                
+
                 # Send the email
                 success = MailMeHandler.send_mail_me_email(
                     phone_number=phone_number,
                     mail_me_request=mail_me_request
                 )
-                
+
                 if success:
                     final_response = agent_response
                 else:
                     final_response = "❌ Failed to send the email. Please try again."
-                    
+
             except Exception as e:
                 logger.error(f"MailMe action failed: {e}", exc_info=True)
                 final_response = f"❌ Error sending email: {str(e)}"
-        
+
         # Handle Calendar action (booking, creating, updating, deleting)
         elif action_type == "calendar":
             logger.info("Processing Calendar action.")
@@ -140,16 +140,16 @@ def webhook_handler(payload):
                 from .calendar_action_executor import CalendarActionExecutor
                 executor = CalendarActionExecutor(phone_number)
                 action_result_obj = executor.execute_action(agent_result.get("raw_result"))
-                
+
                 if hasattr(action_result_obj, "response") and action_result_obj.response:
                     final_response = action_result_obj.response
                 else:
                     final_response = agent_response
-                    
+
             except Exception as e:
                 logger.error(f"Calendar action failed: {e}", exc_info=True)
                 final_response = agent_response  # Fall back to agent response
-        
+
         # Handle Email action (sending, composing)
         elif action_type == "email":
             logger.info("Processing Email action.")
@@ -157,16 +157,16 @@ def webhook_handler(payload):
                 from .email_action_executor import EmailActionExecutor
                 executor = EmailActionExecutor(phone_number)
                 action_result_obj = executor.execute_action(agent_result.get("raw_result"))
-                
+
                 if hasattr(action_result_obj, "response") and action_result_obj.response:
                     final_response = action_result_obj.response
                 else:
                     final_response = agent_response
-                    
+
             except Exception as e:
                 logger.error(f"Email action failed: {e}", exc_info=True)
                 final_response = agent_response  # Fall back to agent response
-        
+
         # Handle Personal Assistant response (queries, summaries, greetings)
         elif action_type == "personal_assistant":
             logger.info("Processing Personal Assistant response.")
@@ -177,18 +177,18 @@ def webhook_handler(payload):
                     from .calendar_action_executor import CalendarActionExecutor
                     executor = CalendarActionExecutor(phone_number)
                     action_result_obj = executor.execute_action(agent_result.get("raw_result"))
-                    
+
                     if hasattr(action_result_obj, "response") and action_result_obj.response:
                         final_response = action_result_obj.response
                     else:
                         final_response = agent_response
-                        
+
                 # Check if the response indicates email information is needed
                 elif _needs_email_data(message_to_process):
                     from .email_action_executor import EmailActionExecutor
                     executor = EmailActionExecutor(phone_number)
                     action_result_obj = executor.execute_action(agent_result.get("raw_result"))
-                    
+
                     if hasattr(action_result_obj, "response") and action_result_obj.response:
                         final_response = action_result_obj.response
                     else:
@@ -196,11 +196,11 @@ def webhook_handler(payload):
                 else:
                     # General conversation or greeting
                     final_response = agent_response
-                    
+
             except Exception as e:
                 logger.error(f"Personal Assistant action failed: {e}", exc_info=True)
                 final_response = agent_response  # Fall back to agent response
-        
+
         else:
             # Default: use agent response directly
             final_response = agent_response
@@ -222,7 +222,7 @@ def webhook_handler(payload):
         try:
             if conversation_id:
                 ChatwootClient().send_message(
-                    conversation_id=conversation_id, 
+                    conversation_id=conversation_id,
                     message_text="I encountered an unexpected error. Please try again."
                 )
         except Exception as notify_e:

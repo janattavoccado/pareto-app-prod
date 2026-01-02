@@ -1,5 +1,5 @@
 """
-Pareto Agents - OpenAI Agents SDK Integration
+Pareto Agents - OpenAI Agents SDK Integration for Pareto
 Updated with improved routing logic for Email, Calendar, and Personal Assistant agents
 
 File location: pareto_agents/agents.py
@@ -84,16 +84,16 @@ personal_assistant_agent = Agent(
 def classify_message(message: str) -> str:
     """
     Classify the message to determine which agent should handle it.
-    
+
     Returns:
         str: One of 'mail_me', 'calendar_action', 'email_action', 'personal_assistant'
     """
     message_lower = message.lower().strip()
-    
+
     # 1. Check for 'mail me' command (highest priority)
     if MailMeHandler.is_mail_me_command(message):
         return 'mail_me'
-    
+
     # 2. Check for direct calendar ACTIONS (booking, creating, updating, deleting)
     calendar_action_patterns = [
         r'\b(book|schedule|create|set up|arrange)\b.*(meeting|appointment|event|call)',
@@ -103,24 +103,24 @@ def classify_message(message: str) -> str:
         r'\bbook me\b',
         r'\bschedule me\b',
     ]
-    
+
     for pattern in calendar_action_patterns:
         if re.search(pattern, message_lower):
             logger.info(f"[classify] Matched calendar action pattern: {pattern}")
             return 'calendar_action'
-    
+
     # 3. Check for direct email ACTIONS (sending, composing)
     email_action_patterns = [
         r'\b(send|compose|write|draft)\b.*(email|mail|message)',
         r'\bemail\b.*(to|about)',
         r'\bsend\b.*(to)\b',
     ]
-    
+
     for pattern in email_action_patterns:
         if re.search(pattern, message_lower):
             logger.info(f"[classify] Matched email action pattern: {pattern}")
             return 'email_action'
-    
+
     # 4. Everything else goes to Personal Assistant (queries, summaries, greetings)
     # This includes:
     # - "What meetings do I have today?"
@@ -129,7 +129,7 @@ def classify_message(message: str) -> str:
     # - "Show my schedule"
     # - "What's on my agenda?"
     # - General questions
-    
+
     return 'personal_assistant'
 
 
@@ -145,44 +145,44 @@ async def process_message(
     """
     Process incoming message through agents
     Routes to appropriate agent based on message classification
-    
+
     Args:
         message (str): User's message
         phone_number (str): User's phone number (session ID)
         user_data (dict): User information from database
-        
+
     Returns:
         dict: Processing result with agent response and action type
     """
     try:
         logger.info(f"[agents.py] Processing message from {phone_number}: '{message[:50]}...'")
-        
+
         # Classify the message
         message_type = classify_message(message)
         logger.info(f"[agents.py] Message classified as: {message_type}")
-        
+
         # 1. Handle 'mail me' command
         if message_type == 'mail_me':
             logger.info("[agents.py] Routing to MailMeHandler.")
             mail_content = MailMeHandler.extract_mail_me_content(message)
             user_name = f"{user_data.get('first_name')} {user_data.get('last_name')}"
             user_email = user_data.get('email')
-            
+
             mail_me_request = MailMeHandler.create_mail_me_request(
                 content=mail_content, user_email=user_email, user_name=user_name
             )
-            
+
             response = MailMeHandler.format_mail_me_response(
                 user_name=user_name, subject=mail_me_request.subject, recipient=user_email
             )
-            
+
             return {
                 "is_mail_me": True,
                 "agent_response": response,
                 "action_type": "mail_me",
                 "mail_me_request": mail_me_request,
             }
-        
+
         # 2. Handle calendar actions (book, create, update, delete)
         if message_type == 'calendar_action':
             logger.info("[agents.py] Routing to Calendar Manager for action.")
@@ -191,17 +191,17 @@ async def process_message(
                 starting_agent=calendar_agent,
                 input=message,
             )
-            
+
             agent_response = _extract_response(result)
             logger.info(f"[agents.py] Calendar Manager response: '{agent_response[:100]}...'")
-            
+
             return {
                 "is_mail_me": False,
                 "agent_response": agent_response,
                 "action_type": "calendar",
                 "raw_result": result,
             }
-        
+
         # 3. Handle email actions (send, compose)
         if message_type == 'email_action':
             logger.info("[agents.py] Routing to Email Manager for action.")
@@ -210,17 +210,17 @@ async def process_message(
                 starting_agent=email_agent,
                 input=message,
             )
-            
+
             agent_response = _extract_response(result)
             logger.info(f"[agents.py] Email Manager response: '{agent_response[:100]}...'")
-            
+
             return {
                 "is_mail_me": False,
                 "agent_response": agent_response,
                 "action_type": "email",
                 "raw_result": result,
             }
-        
+
         # 4. Handle queries, summaries, and general conversation via Personal Assistant
         logger.info("[agents.py] Routing to Personal Assistant.")
         runner = Runner()
@@ -228,17 +228,17 @@ async def process_message(
             starting_agent=personal_assistant_agent,
             input=message,
         )
-        
+
         agent_response = _extract_response(result)
         logger.info(f"[agents.py] Personal Assistant response: '{agent_response[:100]}...'")
-        
+
         return {
             "is_mail_me": False,
             "agent_response": agent_response,
             "action_type": "personal_assistant",
             "raw_result": result,
         }
-    
+
     except Exception as e:
         logger.error(f"[agents.py] Error processing message: {str(e)}", exc_info=True)
         return {
@@ -280,14 +280,14 @@ def process_message_sync(
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-        
+
         # Run async function
         result = loop.run_until_complete(
             process_message(message, phone_number, user_data)
         )
-        
+
         return result
-    
+
     except Exception as e:
         logger.error(f"[agents.py] Error in sync wrapper: {str(e)}", exc_info=True)
         return {
