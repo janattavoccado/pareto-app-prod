@@ -60,6 +60,8 @@ class Tenant(Base):
     __tablename__ = 'tenants'
     
     id = Column(Integer, primary_key=True)
+    # 'name' column for backwards compatibility with existing database schema
+    name = Column(String(255), nullable=False)
     company_name = Column(String(255), nullable=False)
     company_slug = Column(String(255), unique=True, nullable=False)
     email = Column(String(255))

@@ -273,8 +273,15 @@ def create_tenant():
                 company_slug=data['company_slug'],
                 email=data.get('email'),
                 phone=data.get('phone'),
+                is_active=data.get('is_active', True),
                 created_by_admin_id=admin_info['admin_id']
             )
+            # Set 'name' field for backwards compatibility with old schema
+            if hasattr(tenant, 'name') or True:  # Always try to set it
+                try:
+                    tenant.name = data['company_name']
+                except AttributeError:
+                    pass  # Column doesn't exist, ignore
             session.add(tenant)
             session.commit()
             log_audit(admin_info['admin_id'], 'CREATE', 'TENANT', tenant.id, tenant.to_dict(), request.remote_addr)
