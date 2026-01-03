@@ -80,6 +80,16 @@ def run_migration():
         # =====================================================================
         # 2. Fix audit_logs table - add missing columns
         # =====================================================================
+        if not column_exists(conn, 'audit_logs', 'created_at', is_postgres):
+            logger.info("Adding 'created_at' column to audit_logs table...")
+            if is_postgres:
+                conn.execute(text("ALTER TABLE audit_logs ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"))
+            else:
+                conn.execute(text("ALTER TABLE audit_logs ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP"))
+            migrations_applied.append("audit_logs.created_at")
+        else:
+            logger.info("✓ audit_logs.created_at already exists")
+        
         if not column_exists(conn, 'audit_logs', 'entity_type', is_postgres):
             logger.info("Adding 'entity_type' column to audit_logs table...")
             if is_postgres:
@@ -103,6 +113,16 @@ def run_migration():
             migrations_applied.append("audit_logs.changes")
         else:
             logger.info("✓ audit_logs.changes already exists")
+        
+        if not column_exists(conn, 'audit_logs', 'ip_address', is_postgres):
+            logger.info("Adding 'ip_address' column to audit_logs table...")
+            if is_postgres:
+                conn.execute(text("ALTER TABLE audit_logs ADD COLUMN ip_address VARCHAR(45) NULL"))
+            else:
+                conn.execute(text("ALTER TABLE audit_logs ADD COLUMN ip_address TEXT NULL"))
+            migrations_applied.append("audit_logs.ip_address")
+        else:
+            logger.info("✓ audit_logs.ip_address already exists")
         
         # =====================================================================
         # 3. Fix tenants table - handle name vs company_name mismatch
