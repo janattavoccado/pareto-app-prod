@@ -78,6 +78,7 @@ function setupEventListeners() {
     document.getElementById('userFilterEnabled').addEventListener('change', filterUsers);
 
     // Tenant management
+    document.getElementById('addTenantBtn').addEventListener('click', openAddTenantModal);
     document.getElementById('tenantForm').addEventListener('submit', handleSaveTenant);
     
     // Settings
@@ -493,7 +494,19 @@ async function loadTenantsForDropdown() {
     select.innerHTML = tenants.map(t => `<option value="${t.id}">${t.company_name}</option>`).join('');
 }
 
+function openAddTenantModal() {
+    document.getElementById('tenantModalTitle').textContent = 'Add Tenant';
+    document.getElementById('tenantId').value = '';
+    document.getElementById('companyName').value = '';
+    document.getElementById('companySlug').value = '';
+    document.getElementById('tenantEmail').value = '';
+    document.getElementById('tenantPhone').value = '';
+    document.getElementById('tenantActive').value = 'true';
+    openModal('tenantModal');
+}
+
 function openEditTenantModal(tenantId) {
+    document.getElementById('tenantModalTitle').textContent = 'Edit Tenant';
     const tenant = tenants.find(t => t.id === tenantId);
     if (tenant) {
         document.getElementById('tenantId').value = tenant.id;
@@ -518,9 +531,15 @@ async function handleSaveTenant(e) {
         is_active: document.getElementById('tenantActive').value === 'true'
     };
     
+    const isNewTenant = !tenantId;
+    const url = isNewTenant 
+        ? `${API_BASE_URL}/admin/tenants`
+        : `${API_BASE_URL}/admin/tenants/${tenantId}`;
+    const method = isNewTenant ? 'POST' : 'PUT';
+    
     try {
-        const response = await fetch(`${API_BASE_URL}/admin/tenants/${tenantId}`, {
-            method: 'PUT',
+        const response = await fetch(url, {
+            method: method,
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${sessionToken}`
@@ -531,7 +550,7 @@ async function handleSaveTenant(e) {
         const data = await response.json();
         
         if (data.success) {
-            showAlert('Tenant updated successfully!', 'success');
+            showAlert(`Tenant ${isNewTenant ? 'created' : 'updated'} successfully!`, 'success');
             closeModal('tenantModal');
             loadTenants();
         } else {
