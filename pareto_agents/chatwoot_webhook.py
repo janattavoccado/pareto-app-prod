@@ -208,8 +208,13 @@ def webhook_handler(payload):
             logger.info("Processing Personal Assistant response.")
             # For queries and summaries, we may need to execute calendar/email reads
             try:
+                # Check for simple questions first (date, time, etc.) - use agent response directly
+                if _is_simple_question(message_to_process):
+                    logger.info("Simple question detected - using agent response directly.")
+                    final_response = agent_response
+                
                 # Check if the response indicates calendar information is needed
-                if _needs_calendar_data(message_to_process):
+                elif _needs_calendar_data(message_to_process):
                     from .calendar_action_executor import CalendarActionExecutor
                     executor = CalendarActionExecutor(phone_number)
                     action_result_obj = executor.execute_action(agent_result.get("raw_result"))
@@ -290,6 +295,27 @@ def _needs_email_data(message: str) -> bool:
         'summarize', 'summary', 'new emails', 'recent emails'
     ]
     return any(keyword in message_lower for keyword in email_query_keywords)
+
+
+def _is_simple_question(message: str) -> bool:
+    """
+    Check if the message is a simple question that should be answered directly
+    by the agent without needing action executors (calendar/email).
+    """
+    message_lower = message.lower()
+    simple_question_patterns = [
+        'what is today',
+        "what's today",
+        'what date',
+        'what time',
+        'current date',
+        'current time',
+        'today\'s date',
+        "today's date",
+        'what day is it',
+        'what day is today',
+    ]
+    return any(pattern in message_lower for pattern in simple_question_patterns)
 
 
 # ============================================================================

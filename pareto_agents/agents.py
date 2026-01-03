@@ -8,12 +8,31 @@ File location: pareto_agents/agents.py
 import logging
 import asyncio
 import re
+from datetime import datetime
 from typing import Optional, Dict, Any
+import pytz
 
 from agents import Agent, Runner
 from .mail_me_handler import MailMeHandler
 
 logger = logging.getLogger(__name__)
+
+# Default timezone for the application
+DEFAULT_TIMEZONE = pytz.timezone('Europe/Stockholm')  # CET/CEST
+
+
+def get_current_datetime_context() -> str:
+    """
+    Get the current date and time formatted for agent context.
+    Returns a string with current date, time, and day of week.
+    """
+    now = datetime.now(DEFAULT_TIMEZONE)
+    return (
+        f"Current date and time: {now.strftime('%A, %d %B %Y at %H:%M')} "
+        f"(Timezone: {DEFAULT_TIMEZONE.zone}). "
+        f"Today is {now.strftime('%A')}. "
+        f"Tomorrow is {(now + __import__('datetime').timedelta(days=1)).strftime('%A, %d %B %Y')}."
+    )
 
 
 # ============================================================================
@@ -48,14 +67,16 @@ calendar_agent = Agent(
         "2. Updating existing events - modify event details, reschedule meetings "
         "3. Deleting events - cancel meetings and remove events from calendar "
         "\n"
+        "CRITICAL: The message will contain a [SYSTEM: ...] section with the CURRENT DATE AND TIME. "
+        "You MUST use this date/time information to correctly interpret relative dates like 'tomorrow', 'next Monday', 'today'. "
+        "NEVER guess or hallucinate dates - always calculate from the provided current date. "
+        "\n"
         "IMPORTANT: When a user asks you to create or modify a calendar event, PROCEED IMMEDIATELY without asking for confirmation. "
         "Extract the event details (title, date, time, location, attendees) from the user's request and proceed directly. "
-        "Provide a confirmation message after the action is completed. "
+        "Provide a confirmation message after the action is completed with the EXACT date you scheduled it for. "
         "Be direct and action-oriented. Do not ask for confirmation - just execute the requested action. "
         "\n"
-        "Always use the current date and time in CET (Central European Time) timezone when interpreting dates and times. "
-        "When a user mentions relative dates like 'tomorrow', 'next Monday', 'in 3 days', interpret them relative to the current date. "
-        "Always format times in 24-hour format and include timezone information in responses."
+        "Always format times in 24-hour format and include the full date (day, month, year) in responses."
     ),
 )
 
@@ -69,6 +90,10 @@ personal_assistant_agent = Agent(
         "2. Email queries - 'Summarize my unread emails', 'What new emails do I have?' "
         "3. Daily summaries - 'Give me a summary of my day', 'What's on my agenda?' "
         "4. General conversation - Greetings, questions, and general assistance "
+        "5. Date and time questions - 'What is today's date?', 'What time is it?' "
+        "\n"
+        "CRITICAL: The message will contain a [SYSTEM: ...] section with the CURRENT DATE AND TIME. "
+        "When a user asks about the current date, time, or day of week, use this information to provide an accurate answer. "
         "\n"
         "When a user asks about their calendar or emails, retrieve the relevant information and present it clearly. "
         "For greetings like 'Hello', respond warmly and ask how you can help. "
@@ -157,9 +182,16 @@ async def process_message(
     try:
         logger.info(f"[agents.py] Processing message from {phone_number}: '{message[:50]}...'")
 
+        # Get current date/time context
+        datetime_context = get_current_datetime_context()
+        logger.info(f"[agents.py] DateTime context: {datetime_context}")
+
         # Classify the message
         message_type = classify_message(message)
         logger.info(f"[agents.py] Message classified as: {message_type}")
+        
+        # Prepend datetime context to message for agent processing
+        message_with_context = f"[SYSTEM: {datetime_context}]\n\nUser message: {message}"
 
         # 1. Handle 'mail me' command
         if message_type == 'mail_me':
@@ -189,7 +221,7 @@ async def process_message(
             runner = Runner()
             result = await runner.run(
                 starting_agent=calendar_agent,
-                input=message,
+                input=message_with_context,
             )
 
             agent_response = _extract_response(result)
@@ -208,7 +240,7 @@ async def process_message(
             runner = Runner()
             result = await runner.run(
                 starting_agent=email_agent,
-                input=message,
+                input=message_with_context,
             )
 
             agent_response = _extract_response(result)
@@ -226,7 +258,7 @@ async def process_message(
         runner = Runner()
         result = await runner.run(
             starting_agent=personal_assistant_agent,
-            input=message,
+            input=message_with_context,
         )
 
         agent_response = _extract_response(result)
