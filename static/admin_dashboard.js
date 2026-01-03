@@ -297,12 +297,16 @@ function displayUsers(users) {
         // Escape single quotes in names for onclick handler
         const escapedName = `${user.first_name} ${user.last_name}`.replace(/'/g, "\\'");
         const tokenUpdatedAt = user.google_token_updated_at || null;
+        const calendarDisplay = user.google_calendar_id 
+            ? `<span class="badge badge-info" title="${user.google_calendar_id}">${user.google_calendar_id.length > 15 ? user.google_calendar_id.substring(0, 15) + '...' : user.google_calendar_id}</span>` 
+            : '<span class="badge badge-secondary">Not Set</span>';
         
         return `
         <tr data-user-id="${user.id}">
             <td>${user.first_name} ${user.last_name}</td>
             <td>${user.phone_number}</td>
             <td>${user.email || '-'}</td>
+            <td>${calendarDisplay}</td>
             <td>
                 <span class="badge ${user.is_enabled ? 'badge-success' : 'badge-danger'}">${user.is_enabled ? 'Enabled' : 'Disabled'}</span>
             </td>
@@ -348,6 +352,7 @@ async function openEditUserModal(userId) {
             document.getElementById('userLastName').value = user.last_name;
             document.getElementById('userPhone').value = user.phone_number;
             document.getElementById('userEmail').value = user.email || '';
+            document.getElementById('userCalendarId').value = user.google_calendar_id || '';
             document.getElementById('userEnabled').checked = user.is_enabled;
             openModal('userModal');
         } else {
@@ -368,6 +373,7 @@ async function handleSaveUser(e) {
         last_name: document.getElementById('userLastName').value,
         phone_number: document.getElementById('userPhone').value,
         email: document.getElementById('userEmail').value,
+        google_calendar_id: document.getElementById('userCalendarId').value || null,
         is_enabled: document.getElementById('userEnabled').checked
     };
     

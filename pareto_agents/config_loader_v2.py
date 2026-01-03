@@ -115,6 +115,18 @@ class ConfigLoaderV2:
             return None
         finally:
             session.close()
+    
+    @staticmethod
+    def get_user_calendar_id_by_phone(phone_number: str) -> Optional[str]:
+        """Get user's Google Calendar ID from database by phone number."""
+        session = get_db_session()
+        try:
+            user = session.query(User).filter_by(phone_number=phone_number).first()
+            if user:
+                return user.google_calendar_id
+            return None
+        finally:
+            session.close()
 
     @staticmethod
     def get_openai_api_key() -> Optional[str]:
@@ -154,7 +166,12 @@ class ConfigLoaderV2:
             logger.info("✅ Personal Assistant config loaded from environment.")
             return default_config
 
-
+        # Load from general user config file
+        user_config_file = ConfigLoaderV2._load_json_from_file("configurations/users.json")
+        if user_config_file and "personal_assistant" in user_config_file:
+            default_config.update(user_config_file["personal_assistant"])
+            logger.info("✅ Personal Assistant config loaded from users.json.")
+            return default_config
 
         logger.info("✅ Personal Assistant config loaded with default values.")
         return default_config
@@ -167,3 +184,4 @@ def get_personal_assistant_config(): return AppConfig.personal_assistant_config
 
 # Expose the database token function directly
 get_google_user_token_by_phone = ConfigLoaderV2.get_google_user_token_by_phone
+get_user_calendar_id_by_phone = ConfigLoaderV2.get_user_calendar_id_by_phone

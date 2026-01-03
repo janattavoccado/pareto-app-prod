@@ -111,6 +111,8 @@ class User(Base):
     # Google token stored as Base64 encrypted string (replaces file-based tokens)
     google_token_base64 = Column(Text, nullable=True)
     google_token_updated_at = Column(DateTime, nullable=True)
+    # Google Calendar ID for user's personal calendar (within shared Google account)
+    google_calendar_id = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -133,6 +135,10 @@ class User(Base):
         """Check if user has a Google token configured"""
         return bool(self.google_token_base64)
     
+    def has_google_calendar(self) -> bool:
+        """Check if user has a Google Calendar configured"""
+        return bool(self.google_calendar_id)
+    
     def to_dict(self):
         return {
             'id': self.id,
@@ -144,6 +150,8 @@ class User(Base):
             'is_enabled': self.is_enabled,
             'has_google_token': self.has_google_token(),
             'google_token_updated_at': self.google_token_updated_at.isoformat() if self.google_token_updated_at else None,
+            'google_calendar_id': self.google_calendar_id,
+            'has_google_calendar': self.has_google_calendar(),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

@@ -29,7 +29,7 @@ class GoogleCalendarClient:
     TIMEZONE_CET = "Europe/Zagreb"
     SCOPES = ["https://www.googleapis.com/auth/calendar"]
     
-    def __init__(self, token_source: Union[str, Dict[str, Any]]):
+    def __init__(self, token_source: Union[str, Dict[str, Any]], calendar_id: Optional[str] = None):
         """
         Initialize Google Calendar client
         
@@ -37,8 +37,11 @@ class GoogleCalendarClient:
             token_source: Either:
                 - str: Path to OAuth2 token file (or env var name for Heroku)
                 - dict: Token data directly (from database)
+            calendar_id: Optional calendar ID to use instead of 'primary'.
+                        Can be a calendar name or full calendar ID (e.g., 'xxx@group.calendar.google.com')
         """
         self.token_source = token_source
+        self.calendar_id = calendar_id or 'primary'
         self.service = None
         self._initialize_service()
     
@@ -166,7 +169,7 @@ class GoogleCalendarClient:
             
             # Create event
             created_event = self.service.events().insert(
-                calendarId='primary',
+                calendarId=self.calendar_id,
                 body=event,
                 sendNotifications=True
             ).execute()
@@ -212,7 +215,7 @@ class GoogleCalendarClient:
                 self._initialize_service()
             
             kwargs = {
-                'calendarId': 'primary',
+                'calendarId': self.calendar_id,
                 'maxResults': max_results,
                 'singleEvents': True,
                 'orderBy': 'startTime',
@@ -253,7 +256,7 @@ class GoogleCalendarClient:
                 self._initialize_service()
             
             self.service.events().delete(
-                calendarId='primary',
+                calendarId=self.calendar_id,
                 eventId=event_id
             ).execute()
             
@@ -298,7 +301,7 @@ class GoogleCalendarClient:
             
             # Get existing event
             event = self.service.events().get(
-                calendarId='primary',
+                calendarId=self.calendar_id,
                 eventId=event_id
             ).execute()
             
@@ -323,7 +326,7 @@ class GoogleCalendarClient:
             
             # Update event
             updated_event = self.service.events().update(
-                calendarId='primary',
+                calendarId=self.calendar_id,
                 eventId=event_id,
                 body=event
             ).execute()
