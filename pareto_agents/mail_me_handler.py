@@ -44,12 +44,12 @@ class MailMeHandler:
         """
         Check if message is a "mail me" / "email me" / "send me" command (send to self)
         
-        Recognizes patterns like:
-        - "mail me ..."
-        - "email me ..."
-        - "send me an email ..."
-        - "send me a mail ..."
+        Recognizes patterns in English, Swedish, and Croatian like:
+        - "mail me ..." / "email me ..."
+        - "send me an email ..." / "send me a mail ..."
         - "send an email to me ..."
+        - Swedish: "mejla mig ...", "skicka mig ett mejl ..."
+        - Croatian: "pošalji mi mail ...", "pošalji mi e-mail ..."
         
         Args:
             message (str): User's message
@@ -59,14 +59,31 @@ class MailMeHandler:
         """
         message_lower = message.strip().lower()
         
-        # Direct patterns: "mail me" or "email me" at start
+        # Direct patterns: "mail me" or "email me" at start (English)
         if message_lower.startswith("mail me") or message_lower.startswith("email me"):
             return True
         
+        # Swedish direct patterns: "mejla mig", "maila mig"
+        if message_lower.startswith("mejla mig") or message_lower.startswith("maila mig"):
+            return True
+        
+        # Croatian direct patterns: "pošalji mi", "mejlaj mi"
+        if message_lower.startswith("pošalji mi") or message_lower.startswith("mejlaj mi"):
+            return True
+        
         # "Send me" patterns: "send me an email", "send me a mail", etc.
+        # Includes English, Swedish, and Croatian patterns
         send_me_patterns = [
+            # English
             r'^send\s+me\s+(an?\s+)?(email|mail|message)',
             r'^send\s+(an?\s+)?(email|mail|message)\s+to\s+me',
+            # Swedish: "skicka mig ett mejl", "skicka ett mejl till mig"
+            r'^skicka\s+mig\s+(ett?\s+)?(mejl|mail|meddelande)',
+            r'^skicka\s+(ett?\s+)?(mejl|mail|meddelande)\s+till\s+mig',
+            # Croatian: "pošalji mi mail", "pošalji mail meni"
+            r'^pošalji\s+mi\s+(jedan?\s+)?(e-?mail|mail|poruku)',
+            r'^pošalji\s+(jedan?\s+)?(e-?mail|mail|poruku)\s+meni',
+            r'^napiši\s+mi\s+(jedan?\s+)?(e-?mail|mail|poruku)',
         ]
         
         for pattern in send_me_patterns:
@@ -80,11 +97,12 @@ class MailMeHandler:
         """
         Extract content after mail-to-self command patterns
         
-        Handles patterns like:
+        Handles patterns in English, Swedish, and Croatian like:
         - "mail me ..." -> extracts content after "mail me"
         - "email me ..." -> extracts content after "email me"
         - "send me an email ..." -> extracts content after "send me an email"
-        - "send me a mail that ..." -> extracts content after "send me a mail"
+        - Swedish: "mejla mig ..." -> extracts content after "mejla mig"
+        - Croatian: "pošalji mi mail ..." -> extracts content after "pošalji mi mail"
         
         Args:
             message (str): User's message with mail-to-self command
@@ -93,10 +111,20 @@ class MailMeHandler:
             str: Content to be mailed
         """
         # Try different patterns in order of specificity
+        # Includes English, Swedish, and Croatian patterns
         patterns = [
+            # English patterns
             r'^send\s+me\s+(an?\s+)?(email|mail|message)\s+(that\s+)?',  # "send me an email that..."
             r'^send\s+(an?\s+)?(email|mail|message)\s+to\s+me\s+(that\s+)?',  # "send an email to me that..."
             r'^(mail|email)\s+me\s+(that\s+)?',  # "mail me that..." or "email me that..."
+            # Swedish patterns
+            r'^skicka\s+mig\s+(ett?\s+)?(mejl|mail|meddelande)\s+(att\s+|om\s+)?',  # "skicka mig ett mejl att..."
+            r'^skicka\s+(ett?\s+)?(mejl|mail|meddelande)\s+till\s+mig\s+(att\s+|om\s+)?',  # "skicka ett mejl till mig att..."
+            r'^(mejla|maila)\s+mig\s+(att\s+|om\s+)?',  # "mejla mig att..." or "maila mig om..."
+            # Croatian patterns
+            r'^pošalji\s+mi\s+(jedan?\s+)?(e-?mail|mail|poruku)\s+(da\s+|o\s+)?',  # "pošalji mi mail da..."
+            r'^pošalji\s+(jedan?\s+)?(e-?mail|mail|poruku)\s+meni\s+(da\s+|o\s+)?',  # "pošalji mail meni da..."
+            r'^(mejlaj|napiši)\s+mi\s+(da\s+|o\s+)?',  # "mejlaj mi da..." or "napiši mi o..."
         ]
         
         for pattern in patterns:

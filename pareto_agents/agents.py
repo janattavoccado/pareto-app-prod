@@ -120,7 +120,7 @@ def classify_message(message: str) -> str:
         return 'mail_me'
 
     # 2. Check for direct calendar ACTIONS (booking, creating, updating, deleting)
-    # Includes both English and Swedish keywords for multilingual support
+    # Includes English, Swedish, and Croatian keywords for multilingual support
     calendar_action_patterns = [
         # English patterns
         r'\b(book|schedule|create|set up|arrange)\b.*(meeting|appointment|event|call)',
@@ -137,8 +137,17 @@ def classify_message(message: str) -> str:
         r'\blägg\b.*(i|på).*(kalender|kalendern|schema)',
         r'\b(boka|bokar|boken)\s+(ett\s+)?möte\b',
         r'\b(ett\s+)?möte\b.*(imorgon|idag|nästa|klockan)',
-        # Flexible pattern: any message containing "möte" + time indicators
         r'\bmöte\b.*(klockan|\d{1,2}[:.\s]?\d{0,2}\s*(am|pm)?|imorgon|idag)',
+        # Croatian patterns (zakazati/rezervirati=book, sastanak=meeting, kalendar=calendar, otkazati=cancel)
+        # Note: Whisper may transcribe variations like "zakaži", "rezerviraj", "zakažem"
+        r'\b(zakazati|zakaži|zakažem|rezervirati|rezerviraj|stvoriti|stvori|napraviti|napravi|dogovoriti|dogovori)\b.*(sastanak|sastanke|događaj|poziv)',
+        r'\b(promijeniti|promijeni|ažurirati|ažuriraj|premjestiti|premjesti)\b.*(sastanak|sastanke|događaj)',
+        r'\b(otkazati|otkaži|obrisati|obriši|ukloniti|ukloni)\b.*(sastanak|sastanke|događaj)',
+        r'\bdodaj\b.*(u|na).*(kalendar|raspored)',
+        r'\b(zakazati|zakaži|rezervirati|rezerviraj)\s+(jedan\s+)?sastanak\b',
+        r'\b(jedan\s+)?sastanak\b.*(sutra|danas|sljedeći|u)',
+        # Flexible pattern: any message containing "sastanak" + time indicators
+        r'\bsastanak\b.*(u|sati|\d{1,2}[:.\s]?\d{0,2}|sutra|danas)',
     ]
 
     for pattern in calendar_action_patterns:
@@ -147,7 +156,7 @@ def classify_message(message: str) -> str:
             return 'calendar_action'
 
     # 3. Check for direct email ACTIONS (sending, composing)
-    # Includes both English and Swedish keywords for multilingual support
+    # Includes English, Swedish, and Croatian keywords for multilingual support
     email_action_patterns = [
         # English patterns
         r'\b(send|compose|write|draft)\b.*(email|mail|message)',
@@ -157,6 +166,10 @@ def classify_message(message: str) -> str:
         r'\b(skicka|skriv|författa)\b.*(mejl|mail|e-post|epost|meddelande)',
         r'\bmejla\b.*(till|om)',
         r'\bskicka\b.*(till)\b',
+        # Croatian patterns (poslati=send, e-mail/mail/poruka=email/message)
+        r'\b(poslati|pošalji|pošaljite|napisati|napiši|napišite|sastaviti|sastavi)\b.*(e-mail|email|mail|poruku|poruka)',
+        r'\bmejlati\b.*(na|o)',
+        r'\bposlati\b.*(na)\b',
     ]
 
     for pattern in email_action_patterns:

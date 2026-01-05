@@ -138,21 +138,45 @@ class EmailActionExecutor:
         
         # IMPORTANT: Check for list/summarize keywords FIRST to avoid false positives
         # "summarize emails" should be list_emails, not send_email
+        # Includes English, Swedish, and Croatian keywords
         list_keywords = [
+            # English
             'summarize', 'summary', 'list', 'show', 'recent', 'latest',
             'last', 'my emails', 'my messages', 'get emails', 'retrieve',
-            'fetch', 'read', 'what emails', 'any emails', 'new emails'
+            'fetch', 'read', 'what emails', 'any emails', 'new emails',
+            # Swedish
+            'sammanfatta', 'sammanfattning', 'visa', 'senaste', 'sista',
+            'mina mejl', 'mina meddelanden', 'hämta mejl', 'läs',
+            # Croatian (sažeti=summarize, prikazati=show, zadnji=last, moji=my)
+            'sažeti', 'sažetak', 'popis', 'prikaži', 'nedavni', 'zadnji',
+            'moji mailovi', 'moje poruke', 'dohvati mailove', 'čitaj'
         ]
         if any(keyword in response_lower for keyword in list_keywords):
             return 'list_emails'
         
         # Check for unread-specific keywords
-        unread_keywords = ['unread', 'inbox', 'check inbox', 'new messages']
+        # Includes English, Swedish, and Croatian keywords
+        unread_keywords = [
+            # English
+            'unread', 'inbox', 'check inbox', 'new messages',
+            # Swedish
+            'olästa', 'inkorg', 'kolla inkorg', 'nya meddelanden',
+            # Croatian (nepročitano=unread, pristigla pošta=inbox)
+            'nepročitano', 'pristigla pošta', 'provjeri pristiglu poštu', 'nove poruke'
+        ]
         if any(keyword in response_lower for keyword in unread_keywords):
             return 'check_unread'
         
         # Check for send keywords LAST (most specific action)
-        send_keywords = ['send', 'sent', 'sending', 'email to', 'compose', 'write email']
+        # Includes English, Swedish, and Croatian keywords
+        send_keywords = [
+            # English
+            'send', 'sent', 'sending', 'email to', 'compose', 'write email',
+            # Swedish
+            'skicka', 'skickat', 'skickar', 'mejl till', 'skriv mejl',
+            # Croatian (poslati=send, poslano=sent, e-mail=email)
+            'poslati', 'poslano', 'šaljem', 'e-mail na', 'napiši e-mail', 'sastavi e-mail'
+        ]
         if any(keyword in response_lower for keyword in send_keywords):
             return 'send_email'
         

@@ -521,7 +521,7 @@ class CalendarActionExecutor:
         # IMPORTANT: Check for list/query keywords FIRST to avoid false positives
         # Words like "schedule" can appear in both create and list contexts
         # Query/summary requests should be detected before create actions
-        # Includes both English and Swedish keywords
+        # Includes English, Swedish, and Croatian keywords
         list_keywords = [
             # English
             'summarize', 'summary', 'what do i have', 'what\'s on', 'what is on',
@@ -532,43 +532,54 @@ class CalendarActionExecutor:
             # Swedish
             'sammanfatta', 'sammanfattning', 'vad har jag', 'visa mig', 'lista',
             'kommande', 'dagens', 'morgondagens', 'den här veckan', 'nästa vecka',
-            'min kalender', 'mina möten', 'mina händelser', 'kolla min', 'visa min'
+            'min kalender', 'mina möten', 'mina händelser', 'kolla min', 'visa min',
+            # Croatian (sažeti=summarize, prikazati=show, popis=list, kalendar=calendar)
+            'sažeti', 'sažetak', 'što imam', 'prikaži mi', 'popis',
+            'nadolazeći', 'današnji', 'sutrašnji', 'ovaj tjedan', 'sljedeći tjedan',
+            'moj kalendar', 'moji sastanci', 'moji događaji', 'provjeri moj', 'prikaži moj'
         ]
         if any(keyword in response_lower for keyword in list_keywords):
             return 'list_events'
 
         # Check for delete keywords (before create, as "cancel" is more specific)
-        # Includes both English and Swedish keywords
+        # Includes English, Swedish, and Croatian keywords
         delete_keywords = [
             # English
             'delete', 'cancel', 'remove', 'cancelled',
             # Swedish
-            'ta bort', 'avboka', 'avbokat', 'ställ in', 'inställt', 'raderad'
+            'ta bort', 'avboka', 'avbokat', 'ställ in', 'inställt', 'raderad',
+            # Croatian (otkazati=cancel, obrisati=delete, ukloniti=remove)
+            'obrisati', 'obrisano', 'otkazati', 'otkazano', 'ukloniti', 'uklonjeno'
         ]
         if any(keyword in response_lower for keyword in delete_keywords):
             return 'delete_event'
 
         # Check for update keywords
-        # Includes both English and Swedish keywords
+        # Includes English, Swedish, and Croatian keywords
         update_keywords = [
             # English
             'update', 'change', 'reschedule', 'modify', 'moved to',
             # Swedish
-            'uppdatera', 'uppdaterat', 'ändra', 'ändrat', 'flytta', 'flyttat', 'ombokning'
+            'uppdatera', 'uppdaterat', 'ändra', 'ändrat', 'flytta', 'flyttat', 'ombokning',
+            # Croatian (ažurirati=update, promijeniti=change, premjestiti=move)
+            'ažurirati', 'ažurirano', 'promijeniti', 'promijenjeno', 'premjestiti', 'premješteno'
         ]
         if any(keyword in response_lower for keyword in update_keywords):
             return 'update_event'
 
         # Check for create/schedule keywords LAST
         # These are more generic and should only match if no other action fits
-        # Includes both English and Swedish keywords
+        # Includes English, Swedish, and Croatian keywords
         create_keywords = [
             # English
             'meeting scheduled', 'event created', 'booked', 'scheduled for',
             'create', 'schedule', 'book', 'add', 'new event', 'set up',
             # Swedish - "bokat" = booked, "möte bokat" = meeting booked
             'möte bokat', 'bokat', 'bokad', 'skapad', 'skapat', 'schemalagd',
-            'schemalagt', 'lagt till', 'nytt möte', 'ny händelse'
+            'schemalagt', 'lagt till', 'nytt möte', 'ny händelse',
+            # Croatian - "zakazano" = scheduled, "sastanak zakazan" = meeting scheduled
+            'sastanak zakazan', 'zakazano', 'rezervirano', 'stvoreno', 'dodano',
+            'novi sastanak', 'novi događaj', 'dogovoreno'
         ]
         if any(keyword in response_lower for keyword in create_keywords):
             return 'create_event'
