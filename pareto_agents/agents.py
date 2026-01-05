@@ -130,12 +130,15 @@ def classify_message(message: str) -> str:
         r'\bbook me\b',
         r'\bschedule me\b',
         # Swedish patterns (boka=book, möte=meeting, kalender=calendar, avboka=cancel)
-        r'\b(boka|skapa|lägg till|arrangera|planera)\b.*(möte|möten|händelse|samtal|event)',
+        # Note: Whisper sometimes transcribes "boka" as "boken" or "bokar"
+        r'\b(boka|bokar|boken|skapa|lägg till|arrangera|planera)\b.*(möte|möten|händelse|samtal|event)',
         r'\b(ändra|flytta|uppdatera|byt)\b.*(möte|möten|händelse)',
         r'\b(avboka|ta bort|radera|ställ in)\b.*(möte|möten|händelse)',
         r'\blägg\b.*(i|på).*(kalender|kalendern|schema)',
-        r'\bboka\s+(ett\s+)?möte\b',
-        r'\bett\s+möte\b.*\b(imorgon|idag|nästa)\b',
+        r'\b(boka|bokar|boken)\s+(ett\s+)?möte\b',
+        r'\b(ett\s+)?möte\b.*(imorgon|idag|nästa|klockan)',
+        # Flexible pattern: any message containing "möte" + time indicators
+        r'\bmöte\b.*(klockan|\d{1,2}[:.\s]?\d{0,2}\s*(am|pm)?|imorgon|idag)',
     ]
 
     for pattern in calendar_action_patterns:
