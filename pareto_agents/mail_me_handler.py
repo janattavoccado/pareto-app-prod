@@ -42,32 +42,70 @@ class MailMeHandler:
     @staticmethod
     def is_mail_me_command(message: str) -> bool:
         """
-        Check if message starts with "mail me" or "email me" command (send to self)
+        Check if message is a "mail me" / "email me" / "send me" command (send to self)
+        
+        Recognizes patterns like:
+        - "mail me ..."
+        - "email me ..."
+        - "send me an email ..."
+        - "send me a mail ..."
+        - "send an email to me ..."
         
         Args:
             message (str): User's message
             
         Returns:
-            bool: True if message is a mail me command
+            bool: True if message is a mail-to-self command
         """
         message_lower = message.strip().lower()
-        # Check for both "mail me" and "email me" patterns (send to self)
-        return message_lower.startswith("mail me") or message_lower.startswith("email me")
+        
+        # Direct patterns: "mail me" or "email me" at start
+        if message_lower.startswith("mail me") or message_lower.startswith("email me"):
+            return True
+        
+        # "Send me" patterns: "send me an email", "send me a mail", etc.
+        send_me_patterns = [
+            r'^send\s+me\s+(an?\s+)?(email|mail|message)',
+            r'^send\s+(an?\s+)?(email|mail|message)\s+to\s+me',
+        ]
+        
+        for pattern in send_me_patterns:
+            if re.match(pattern, message_lower):
+                return True
+        
+        return False
     
     @staticmethod
     def extract_mail_me_content(message: str) -> str:
         """
-        Extract content after "mail me" or "email me" command
+        Extract content after mail-to-self command patterns
+        
+        Handles patterns like:
+        - "mail me ..." -> extracts content after "mail me"
+        - "email me ..." -> extracts content after "email me"
+        - "send me an email ..." -> extracts content after "send me an email"
+        - "send me a mail that ..." -> extracts content after "send me a mail"
         
         Args:
-            message (str): User's message starting with "mail me" or "email me"
+            message (str): User's message with mail-to-self command
             
         Returns:
             str: Content to be mailed
         """
-        # Remove "mail me" or "email me" prefix (case-insensitive)
-        content = re.sub(r'^(mail|email)\s+me\s+', '', message, flags=re.IGNORECASE).strip()
-        return content
+        # Try different patterns in order of specificity
+        patterns = [
+            r'^send\s+me\s+(an?\s+)?(email|mail|message)\s+(that\s+)?',  # "send me an email that..."
+            r'^send\s+(an?\s+)?(email|mail|message)\s+to\s+me\s+(that\s+)?',  # "send an email to me that..."
+            r'^(mail|email)\s+me\s+(that\s+)?',  # "mail me that..." or "email me that..."
+        ]
+        
+        for pattern in patterns:
+            content = re.sub(pattern, '', message, flags=re.IGNORECASE).strip()
+            if content != message.strip():  # Pattern matched and removed something
+                return content
+        
+        # Fallback: return original message
+        return message.strip()
     
     @staticmethod
     def generate_subject_from_content(content: str, max_length: int = 100) -> str:
