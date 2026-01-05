@@ -120,13 +120,22 @@ def classify_message(message: str) -> str:
         return 'mail_me'
 
     # 2. Check for direct calendar ACTIONS (booking, creating, updating, deleting)
+    # Includes both English and Swedish keywords for multilingual support
     calendar_action_patterns = [
+        # English patterns
         r'\b(book|schedule|create|set up|arrange)\b.*(meeting|appointment|event|call)',
         r'\b(update|change|modify|reschedule|move)\b.*(meeting|appointment|event)',
         r'\b(delete|cancel|remove)\b.*(meeting|appointment|event)',
         r'\badd\b.*(to|on).*(calendar|schedule)',
         r'\bbook me\b',
         r'\bschedule me\b',
+        # Swedish patterns (boka=book, möte=meeting, kalender=calendar, avboka=cancel)
+        r'\b(boka|skapa|lägg till|arrangera|planera)\b.*(möte|möten|händelse|samtal|event)',
+        r'\b(ändra|flytta|uppdatera|byt)\b.*(möte|möten|händelse)',
+        r'\b(avboka|ta bort|radera|ställ in)\b.*(möte|möten|händelse)',
+        r'\blägg\b.*(i|på).*(kalender|kalendern|schema)',
+        r'\bboka\s+(ett\s+)?möte\b',
+        r'\bett\s+möte\b.*\b(imorgon|idag|nästa)\b',
     ]
 
     for pattern in calendar_action_patterns:
@@ -135,10 +144,16 @@ def classify_message(message: str) -> str:
             return 'calendar_action'
 
     # 3. Check for direct email ACTIONS (sending, composing)
+    # Includes both English and Swedish keywords for multilingual support
     email_action_patterns = [
+        # English patterns
         r'\b(send|compose|write|draft)\b.*(email|mail|message)',
         r'\bemail\b.*(to|about)',
         r'\bsend\b.*(to)\b',
+        # Swedish patterns (skicka=send, mejl/mail/e-post=email, meddelande=message)
+        r'\b(skicka|skriv|författa)\b.*(mejl|mail|e-post|epost|meddelande)',
+        r'\bmejla\b.*(till|om)',
+        r'\bskicka\b.*(till)\b',
     ]
 
     for pattern in email_action_patterns:
