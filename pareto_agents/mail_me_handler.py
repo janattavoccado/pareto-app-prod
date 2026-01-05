@@ -42,7 +42,7 @@ class MailMeHandler:
     @staticmethod
     def is_mail_me_command(message: str) -> bool:
         """
-        Check if message starts with "mail me" command
+        Check if message starts with "mail me" or "email me" command (send to self)
         
         Args:
             message (str): User's message
@@ -50,21 +50,23 @@ class MailMeHandler:
         Returns:
             bool: True if message is a mail me command
         """
-        return message.strip().lower().startswith("mail me")
+        message_lower = message.strip().lower()
+        # Check for both "mail me" and "email me" patterns (send to self)
+        return message_lower.startswith("mail me") or message_lower.startswith("email me")
     
     @staticmethod
     def extract_mail_me_content(message: str) -> str:
         """
-        Extract content after "mail me" command
+        Extract content after "mail me" or "email me" command
         
         Args:
-            message (str): User's message starting with "mail me"
+            message (str): User's message starting with "mail me" or "email me"
             
         Returns:
             str: Content to be mailed
         """
-        # Remove "mail me" prefix (case-insensitive)
-        content = re.sub(r'^mail\s+me\s+', '', message, flags=re.IGNORECASE).strip()
+        # Remove "mail me" or "email me" prefix (case-insensitive)
+        content = re.sub(r'^(mail|email)\s+me\s+', '', message, flags=re.IGNORECASE).strip()
         return content
     
     @staticmethod
