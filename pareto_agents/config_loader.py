@@ -199,7 +199,7 @@ class ConfigLoader:
             session = get_db_session()
             
             # Get all enabled users with their tenant info
-            users = session.query(User).filter(User.enabled == True).all()
+            users = session.query(User).filter(User.is_enabled == True).all()
             
             if not users:
                 logger.warning("No users found in database")
@@ -213,10 +213,10 @@ class ConfigLoader:
                     'id': user.id,
                     'first_name': user.first_name,
                     'last_name': user.last_name,
-                    'phone': user.phone,
+                    'phone': user.phone_number,
                     'email': user.email,
-                    'calendar_id': user.calendar_id,
-                    'enabled': user.enabled,
+                    'calendar_id': user.google_calendar_id,
+                    'enabled': user.is_enabled,
                     'tenant_id': user.tenant_id,
                     'tenant_name': tenant.company_name if tenant else None
                 }
