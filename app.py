@@ -2,7 +2,7 @@
 Flask Application Entry Point
 
 This file has been updated to:
-1. Use the correct import names from the final config_loader.py.
+1. Use the correct import names from the config_loader.py.
 2. Handle Heroku's dynamic PORT environment variable.
 3. Include a /config-status endpoint for debugging.
 4. Register all blueprints for admin, Tenant CRM, and user authentication.
