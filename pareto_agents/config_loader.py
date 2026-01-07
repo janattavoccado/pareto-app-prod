@@ -183,21 +183,54 @@ class ConfigLoader:
     @staticmethod
     def get_user_config() -> Optional[Dict]:
         """
-        Get user configuration from Base64 env var or file.
+        Get user configuration from PostgreSQL database.
         
-        Priority:
-        1. USER_CONFIG_JSON environment variable (Base64, Heroku)
-        2. configurations/users.json file (Local)
+        Note: USER_CONFIG_JSON is deprecated. Users are now stored in the database.
+        This function returns a dictionary format for backward compatibility.
         
         Returns:
             User configuration dictionary or None
         """
         
-        logger.info("Attempting to load user configuration...")
-        return ConfigLoader._load_base64_json_or_file(
-            env_var_name='USER_CONFIG_JSON',
-            local_path='configurations/users.json'
-        )
+        logger.info("Loading user configuration from database...")
+        
+        try:
+            from .database import get_db_session, User, Tenant
+            session = get_db_session()
+            
+            # Get all enabled users with their tenant info
+            users = session.query(User).filter(User.enabled == True).all()
+            
+            if not users:
+                logger.warning("No users found in database")
+                session.close()
+                return {'users': []}
+            
+            user_list = []
+            for user in users:
+                tenant = session.query(Tenant).filter(Tenant.id == user.tenant_id).first()
+                user_dict = {
+                    'id': user.id,
+                    'first_name': user.first_name,
+                    'last_name': user.last_name,
+                    'phone': user.phone,
+                    'email': user.email,
+                    'calendar_id': user.calendar_id,
+                    'enabled': user.enabled,
+                    'tenant_id': user.tenant_id,
+                    'tenant_name': tenant.company_name if tenant else None
+                }
+                user_list.append(user_dict)
+            
+            session.close()
+            
+            logger.info(f"✅ Loaded {len(user_list)} users from database")
+            return {'users': user_list}
+            
+        except Exception as e:
+            logger.error(f"❌ Error loading users from database: {e}")
+            # Fallback to local file for development
+            return ConfigLoader._load_json_from_file('configurations/users.json')
     
     @staticmethod
     def get_openai_api_key() -> Optional[str]:
@@ -281,9 +314,13 @@ class ConfigLoader:
         if not ConfigLoader.get_google_user_token():
             all_good = False
         
-        # Check user config
-        if not ConfigLoader.get_user_config():
-            all_good = False
+        # Check user config (now from database, always succeeds if DB is available)
+        user_config = ConfigLoader.get_user_config()
+        if user_config:
+            user_count = len(user_config.get('users', []))
+            logger.info(f"✅ User configuration loaded ({user_count} users from database)")
+        else:
+            logger.warning("⚠️ No user configuration available (database may be empty)")
         
         # Check OpenAI API key
         if not ConfigLoader.get_openai_api_key():
