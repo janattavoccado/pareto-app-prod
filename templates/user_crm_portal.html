@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pareto CRM Portal</title>
+    
+    <!-- Material Design CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/materialize.min.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/admin_dashboard.css">
+    <style>
+        .crm-portal-header {
+            background: linear-gradient(135deg, #2196F3, #1976D2);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        .crm-portal-header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .crm-portal-header .tenant-name {
+            opacity: 0.9;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        .lead-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .lead-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .lead-card .lead-subject {
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        .lead-card .lead-meta {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            font-size: 13px;
+            color: #666;
+        }
+        .password-setup-card {
+            max-width: 400px;
+            margin: 50px auto;
+            padding: 30px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav>
+        <div class="nav-wrapper">
+            <span class="brand-logo">
+                <i class="material-icons" style="vertical-align: middle; margin-right: 8px;">contacts</i>
+                Pareto CRM
+            </span>
+            <div class="nav-right" id="userNavRight" style="display: none;">
+                <div class="user-info">
+                    <span id="userDisplayName">User</span>
+                    <div class="user-avatar" id="userAvatarInitial">U</div>
+                </div>
+                <button class="btn btn-secondary btn-small" id="userLogoutBtn">
+                    <i class="material-icons" style="font-size: 18px;">logout</i>
+                    Logout
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="container-main" id="mainContainer" style="display: none;">
+        <!-- CRM Portal Header -->
+        <div class="crm-portal-header">
+            <h1>CRM Leads</h1>
+            <div class="tenant-name" id="tenantDisplayName"></div>
+        </div>
+
+        <!-- Main Content -->
+        <div style="padding: 20px; max-width: 1200px; margin: 0 auto;">
+            <!-- Alert Container -->
+            <div id="alertContainer"></div>
+
+            <!-- Stats -->
+            <div class="stats-grid" style="margin-bottom: 20px;">
+                <div class="stat-card">
+                    <div class="stat-value" id="userCrmTotal">0</div>
+                    <div class="stat-label">Total Leads</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="userCrmOpen">0</div>
+                    <div class="stat-label">Open</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="userCrmInProgress">0</div>
+                    <div class="stat-label">In Progress</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="userCrmMine">0</div>
+                    <div class="stat-label">My Leads</div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="card" style="margin-bottom: 20px;">
+                <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: center;">
+                    <select id="userStatusFilter" class="form-control" style="width: 150px;">
+                        <option value="">All Statuses</option>
+                        <option value="Open">Open</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Closed">Closed</option>
+                        <option value="Rejected">Rejected</option>
+                    </select>
+                    <select id="userPriorityFilter" class="form-control" style="width: 150px;">
+                        <option value="">All Priorities</option>
+                        <option value="High">High</option>
+                        <option value="Mid">Mid</option>
+                        <option value="Low">Low</option>
+                    </select>
+                    <label style="display: flex; align-items: center; gap: 5px;">
+                        <input type="checkbox" id="userMyLeadsOnly">
+                        <span>My Leads Only</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Leads List -->
+            <div id="leadsContainer">
+                <!-- Lead cards will be inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal-overlay active">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>CRM Portal Login</h2>
+            </div>
+            <div class="modal-body">
+                <form id="userLoginForm">
+                    <div class="form-group">
+                        <label for="loginEmail">Email</label>
+                        <input type="email" id="loginEmail" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Password</label>
+                        <input type="password" id="loginPassword" required>
+                    </div>
+                    <div id="loginError" class="alert alert-error hidden">
+                        <i class="material-icons">error_outline</i>
+                        <span id="loginErrorMsg"></span>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
+                </form>
+                <div style="text-align: center; margin-top: 15px;">
+                    <a href="#" id="setupPasswordLink">First time? Set up your password</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Password Setup Modal -->
+    <div id="passwordSetupModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Set Up Password</h2>
+                <button class="modal-close" onclick="closeModal('passwordSetupModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="passwordSetupForm">
+                    <div class="form-group">
+                        <label for="setupEmail">Email</label>
+                        <input type="email" id="setupEmail" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="setupPassword">New Password</label>
+                        <input type="password" id="setupPassword" required minlength="8">
+                        <small style="color: #7f8c8d;">Minimum 8 characters</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="setupConfirmPassword">Confirm Password</label>
+                        <input type="password" id="setupConfirmPassword" required>
+                    </div>
+                    <div id="setupError" class="alert alert-error hidden">
+                        <i class="material-icons">error_outline</i>
+                        <span id="setupErrorMsg"></span>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Set Password</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lead Detail Modal -->
+    <div id="leadDetailModal" class="modal-overlay">
+        <div class="modal" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2 id="leadDetailTitle">Lead Details</h2>
+                <button class="modal-close" onclick="closeModal('leadDetailModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Subject</label>
+                    <p id="leadDetailSubject" style="font-weight: bold; font-size: 16px;"></p>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="form-group">
+                        <label>Created By</label>
+                        <p id="leadDetailCreatedBy"></p>
+                    </div>
+                    <div class="form-group">
+                        <label>Owner</label>
+                        <p id="leadDetailOwner"></p>
+                    </div>
+                    <div class="form-group">
+                        <label>Priority</label>
+                        <span id="leadDetailPriority" class="badge"></span>
+                    </div>
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select id="leadDetailStatus" class="form-control">
+                            <option value="Open">Open</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Closed">Closed</option>
+                            <option value="Rejected">Rejected</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Content</label>
+                    <div id="leadDetailContent" style="background: #f5f5f5; padding: 15px; border-radius: 8px; white-space: pre-wrap;"></div>
+                </div>
+                <div class="form-group" id="leadDetailActionsGroup">
+                    <label>Actions</label>
+                    <div id="leadDetailActions" style="background: #fff3cd; padding: 15px; border-radius: 8px;"></div>
+                </div>
+                <input type="hidden" id="leadDetailId">
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('leadDetailModal')">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="updateLeadStatus()">Update Status</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="/static/user_crm_portal.js"></script>
+</body>
+</html>

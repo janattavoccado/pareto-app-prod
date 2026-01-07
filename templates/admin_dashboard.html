@@ -50,6 +50,10 @@
                 <i class="material-icons">business</i>
                 <span>Tenants</span>
             </div>
+            <div class="sidebar-item" data-page="crm">
+                <i class="material-icons">contacts</i>
+                <span>CRM Leads</span>
+            </div>
             <div class="sidebar-item" data-page="audit-logs">
                 <i class="material-icons">history</i>
                 <span>Audit Logs</span>
@@ -202,6 +206,73 @@
                             </thead>
                             <tbody id="auditLogsTableBody">
                                 <!-- Audit log rows will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CRM Page -->
+            <div id="crmPage" class="page hidden">
+                <div class="page-header">
+                    <h1>CRM Leads</h1>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <select id="crmTenantFilter" class="form-control" style="width: 200px;">
+                            <option value="">All Tenants</option>
+                        </select>
+                        <select id="crmStatusFilter" class="form-control" style="width: 150px;">
+                            <option value="">All Statuses</option>
+                            <option value="Open">Open</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Closed">Closed</option>
+                            <option value="Rejected">Rejected</option>
+                        </select>
+                        <select id="crmPriorityFilter" class="form-control" style="width: 150px;">
+                            <option value="">All Priorities</option>
+                            <option value="High">High</option>
+                            <option value="Mid">Mid</option>
+                            <option value="Low">Low</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- CRM Stats -->
+                <div class="stats-grid" id="crmStatsGrid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="crmTotalLeads">0</div>
+                        <div class="stat-label">Total Leads</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="crmOpenLeads">0</div>
+                        <div class="stat-label">Open</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="crmInProgressLeads">0</div>
+                        <div class="stat-label">In Progress</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="crmHighPriorityLeads">0</div>
+                        <div class="stat-label">High Priority</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Subject</th>
+                                    <th>Tenant</th>
+                                    <th>Created By</th>
+                                    <th>Owner</th>
+                                    <th>Priority</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="crmLeadsTableBody">
+                                <!-- CRM lead rows will be inserted here -->
                             </tbody>
                         </table>
                     </div>
@@ -417,6 +488,66 @@
                         <button type="submit" class="btn btn-primary">Save Changes</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- CRM Lead View Modal -->
+    <div id="crmLeadModal" class="modal-overlay">
+        <div class="modal" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2 id="crmLeadModalTitle">Lead Details</h2>
+                <button class="modal-close" onclick="closeModal('crmLeadModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Subject</label>
+                    <p id="crmLeadSubject" style="font-weight: bold; font-size: 16px;"></p>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="form-group">
+                        <label>Tenant</label>
+                        <p id="crmLeadTenant"></p>
+                    </div>
+                    <div class="form-group">
+                        <label>Created By</label>
+                        <p id="crmLeadCreatedBy"></p>
+                    </div>
+                    <div class="form-group">
+                        <label>Owner</label>
+                        <p id="crmLeadOwner"></p>
+                    </div>
+                    <div class="form-group">
+                        <label>Priority</label>
+                        <span id="crmLeadPriority" class="badge"></span>
+                    </div>
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select id="crmLeadStatus" class="form-control">
+                            <option value="Open">Open</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Closed">Closed</option>
+                            <option value="Rejected">Rejected</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Created</label>
+                        <p id="crmLeadCreated"></p>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Content</label>
+                    <div id="crmLeadContent" style="background: #f5f5f5; padding: 15px; border-radius: 8px; white-space: pre-wrap;"></div>
+                </div>
+                <div class="form-group" id="crmLeadActionsGroup">
+                    <label>Actions</label>
+                    <div id="crmLeadActions" style="background: #fff3cd; padding: 15px; border-radius: 8px;"></div>
+                </div>
+                <input type="hidden" id="crmLeadId">
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('crmLeadModal')">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="updateCrmLeadStatus()">Update Status</button>
+                </div>
             </div>
         </div>
     </div>

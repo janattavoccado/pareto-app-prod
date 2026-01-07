@@ -849,3 +849,241 @@ function showAlert(message, type = 'info') {
         }
     }, 5000);
 }
+
+
+// ============================================================================
+// CRM Management
+// ============================================================================
+
+let crmLeads = [];
+let currentCrmLeadId = null;
+
+async function loadCrmLeads() {
+    const tenantId = document.getElementById('crmTenantFilter').value;
+    const status = document.getElementById('crmStatusFilter').value;
+    const priority = document.getElementById('crmPriorityFilter').value;
+    
+    let url = `${API_BASE_URL}/admin/crm/leads?`;
+    if (tenantId) url += `tenant_id=${tenantId}&`;
+    if (status) url += `status=${status}&`;
+    if (priority) url += `priority=${priority}&`;
+    
+    try {
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            crmLeads = data.leads || [];
+            displayCrmLeads(crmLeads);
+            updateCrmStats(data.stats || {});
+        } else {
+            showAlert(data.message || 'Failed to load CRM leads', 'error');
+        }
+    } catch (error) {
+        console.error('Error loading CRM leads:', error);
+        showAlert('Failed to load CRM leads', 'error');
+    }
+}
+
+function displayCrmLeads(leads) {
+    const tableBody = document.getElementById('crmLeadsTableBody');
+    
+    if (leads && leads.length > 0) {
+        tableBody.innerHTML = leads.map(lead => {
+            const priorityClass = lead.priority === 'High' ? 'badge-danger' : 
+                                  lead.priority === 'Mid' ? 'badge-warning' : 'badge-info';
+            const statusClass = lead.status === 'Open' ? 'badge-primary' :
+                               lead.status === 'In Progress' ? 'badge-warning' :
+                               lead.status === 'Closed' ? 'badge-success' : 'badge-secondary';
+            
+            return `
+                <tr>
+                    <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        ${lead.lead_subject || 'No Subject'}
+                    </td>
+                    <td>${lead.tenant_name || '-'}</td>
+                    <td>${lead.user_name || '-'}</td>
+                    <td>${lead.owner || '-'}</td>
+                    <td><span class="badge ${priorityClass}">${lead.priority || '-'}</span></td>
+                    <td><span class="badge ${statusClass}">${lead.status || '-'}</span></td>
+                    <td>${lead.created_at ? new Date(lead.created_at).toLocaleDateString() : '-'}</td>
+                    <td>
+                        <button class="btn btn-small btn-info" onclick="viewCrmLead(${lead.id})">
+                            <i class="material-icons" style="font-size: 16px;">visibility</i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } else {
+        tableBody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No leads found</td></tr>';
+    }
+}
+
+function updateCrmStats(stats) {
+    document.getElementById('crmTotalLeads').textContent = stats.total || 0;
+    document.getElementById('crmOpenLeads').textContent = stats.open || 0;
+    document.getElementById('crmInProgressLeads').textContent = stats.in_progress || 0;
+    document.getElementById('crmHighPriorityLeads').textContent = stats.high_priority || 0;
+}
+
+async function loadCrmTenantFilter() {
+    // Populate tenant filter dropdown
+    const select = document.getElementById('crmTenantFilter');
+    select.innerHTML = '<option value="">All Tenants</option>';
+    
+    tenants.forEach(tenant => {
+        const option = document.createElement('option');
+        option.value = tenant.id;
+        option.textContent = tenant.company_name || tenant.name;
+        select.appendChild(option);
+    });
+}
+
+async function viewCrmLead(leadId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/crm/leads/${leadId}`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        const data = await response.json();
+        
+        if (data.success && data.lead) {
+            const lead = data.lead;
+            currentCrmLeadId = lead.id;
+            
+            document.getElementById('crmLeadId').value = lead.id;
+            document.getElementById('crmLeadSubject').textContent = lead.lead_subject || 'No Subject';
+            document.getElementById('crmLeadTenant').textContent = lead.tenant_name || '-';
+            document.getElementById('crmLeadCreatedBy').textContent = lead.user_name || '-';
+            document.getElementById('crmLeadOwner').textContent = lead.owner || '-';
+            document.getElementById('crmLeadStatus').value = lead.status || 'Open';
+            document.getElementById('crmLeadCreated').textContent = lead.created_at ? 
+                new Date(lead.created_at).toLocaleString() : '-';
+            
+            // Priority badge
+            const priorityEl = document.getElementById('crmLeadPriority');
+            priorityEl.textContent = lead.priority || '-';
+            priorityEl.className = 'badge ' + (
+                lead.priority === 'High' ? 'badge-danger' : 
+                lead.priority === 'Mid' ? 'badge-warning' : 'badge-info'
+            );
+            
+            // Content
+            let contentHtml = '';
+            if (lead.lead_content) {
+                if (typeof lead.lead_content === 'object') {
+                    contentHtml = JSON.stringify(lead.lead_content, null, 2);
+                } else {
+                    contentHtml = lead.lead_content;
+                }
+            }
+            document.getElementById('crmLeadContent').textContent = contentHtml || 'No content';
+            
+            // Actions
+            const actionsGroup = document.getElementById('crmLeadActionsGroup');
+            const actionsEl = document.getElementById('crmLeadActions');
+            if (lead.action && (typeof lead.action === 'object' ? Object.keys(lead.action).length > 0 : lead.action)) {
+                actionsGroup.style.display = 'block';
+                if (typeof lead.action === 'object') {
+                    actionsEl.textContent = JSON.stringify(lead.action, null, 2);
+                } else {
+                    actionsEl.textContent = lead.action;
+                }
+            } else {
+                actionsGroup.style.display = 'none';
+            }
+            
+            openModal('crmLeadModal');
+        } else {
+            showAlert(data.message || 'Failed to load lead details', 'error');
+        }
+    } catch (error) {
+        console.error('Error loading CRM lead:', error);
+        showAlert('Failed to load lead details', 'error');
+    }
+}
+
+async function updateCrmLeadStatus() {
+    if (!currentCrmLeadId) return;
+    
+    const newStatus = document.getElementById('crmLeadStatus').value;
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/crm/leads/${currentCrmLeadId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionToken}`
+            },
+            body: JSON.stringify({ status: newStatus })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert('Lead status updated successfully!', 'success');
+            closeModal('crmLeadModal');
+            loadCrmLeads();
+        } else {
+            showAlert(data.message || 'Failed to update lead status', 'error');
+        }
+    } catch (error) {
+        console.error('Error updating CRM lead:', error);
+        showAlert('Failed to update lead status', 'error');
+    }
+}
+
+// Add CRM filter event listeners
+document.addEventListener('DOMContentLoaded', () => {
+    // CRM filters
+    const crmTenantFilter = document.getElementById('crmTenantFilter');
+    const crmStatusFilter = document.getElementById('crmStatusFilter');
+    const crmPriorityFilter = document.getElementById('crmPriorityFilter');
+    
+    if (crmTenantFilter) crmTenantFilter.addEventListener('change', loadCrmLeads);
+    if (crmStatusFilter) crmStatusFilter.addEventListener('change', loadCrmLeads);
+    if (crmPriorityFilter) crmPriorityFilter.addEventListener('change', loadCrmLeads);
+});
+
+// Override navigateToPage to include CRM
+const originalNavigateToPage = navigateToPage;
+navigateToPage = function(page) {
+    // Hide all pages
+    document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+    
+    // Update sidebar active state
+    document.querySelectorAll('.sidebar-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.dataset.page === page) {
+            item.classList.add('active');
+        }
+    });
+    
+    // Show selected page and load data
+    const pageElement = document.getElementById(`${page}Page`);
+    if (pageElement) {
+        pageElement.classList.remove('hidden');
+    }
+    
+    // Load page-specific data
+    switch (page) {
+        case 'dashboard':
+            loadDashboardData();
+            break;
+        case 'users':
+            loadUsers();
+            break;
+        case 'tenants':
+            loadTenants();
+            break;
+        case 'crm':
+            loadCrmTenantFilter();
+            loadCrmLeads();
+            break;
+        case 'audit-logs':
+            loadAuditLogs();
+            break;
+    }
+};
