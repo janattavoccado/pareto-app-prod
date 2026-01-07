@@ -149,24 +149,34 @@ def classify_message(message: str) -> str:
     # 3. Check for CRM READ commands (read, get, show, list from CRM)
     # Includes English, Swedish, and Croatian keywords
     crm_read_patterns = [
-        # English patterns
+        # English patterns - standard
         r'\b(read|get|show|list|display|fetch|retrieve|view)\b.*(from|in)\s*(the\s+)?(crm|c\.r\.m\.)',
-        r'\b(crm|c\.r\.m\.)\b.*(read|get|show|list|display|fetch|retrieve|view|leads?|data)',
-        r'\b(my|the)\s+(crm|c\.r\.m\.)\s*(leads?|data|entries|records)?',
+        r'\b(crm|c\.r\.m\.)\b.*(read|get|show|list|display|fetch|retrieve|view|leads?|data|items?)',
+        r'\b(my|the)\s+(crm|c\.r\.m\.)\s*(leads?|data|entries|records|items?)?',
         r'\bshow\s+(me\s+)?(my\s+)?(crm|c\.r\.m\.)',
         r'\bwhat.*(in|on)\s+(my\s+)?(crm|c\.r\.m\.)',
-        r'\b(crm|c\.r\.m\.)\s*(leads?|status|summary|overview)',
+        r'\b(crm|c\.r\.m\.)\s*(leads?|status|summary|overview|items?)',
         r'\bleads?\s+(from|in)\s+(my\s+)?(crm|c\.r\.m\.)',
+        # English patterns - flexible (catch "from CRM..." at start or anywhere)
+        r'^from\s+(the\s+)?(crm|c\.r\.m\.)',  # Message starting with "from CRM"
+        r'\bfrom\s+(my\s+)?(crm|c\.r\.m\.)\b',  # "from my CRM" anywhere
+        r'\b(crm|c\.r\.m\.)\s+(with|items?|entries|priority)',  # "CRM with...", "CRM items"
+        r'\b(high|mid|medium|low)\s+priority.*(crm|c\.r\.m\.)',  # "high priority CRM"
+        r'\b(crm|c\.r\.m\.).*(high|mid|medium|low)\s+priority',  # "CRM... high priority"
+        r'\b(open|closed|progress).*(crm|c\.r\.m\.)',  # "open CRM leads"
+        r'\b(crm|c\.r\.m\.).*(open|closed|progress)',  # "CRM open leads"
         # Swedish patterns (visa=show, hämta=get/fetch, läs=read)
         r'\b(visa|hämta|läs|lista)\b.*(från|i)\s*(min\s+)?(crm|c\.r\.m\.)',
         r'\b(crm|c\.r\.m\.)\b.*(visa|hämta|läs|lista|leads?)',
         r'\bvisa\s+(mig\s+)?(min\s+)?(crm|c\.r\.m\.)',
         r'\bvad.*(i|på)\s+(min\s+)?(crm|c\.r\.m\.)',
+        r'^från\s+(min\s+)?(crm|c\.r\.m\.)',  # Swedish: "från CRM" at start
         # Croatian patterns (prikaži=show, dohvati=get/fetch, pročitaj=read)
         r'\b(prikaži|dohvati|pročitaj|izlistaj)\b.*(iz|u)\s*(moj\s+)?(crm|c\.r\.m\.)',
         r'\b(crm|c\.r\.m\.)\b.*(prikaži|dohvati|pročitaj|izlistaj|leads?)',
         r'\bprikaži\s+(mi\s+)?(moj\s+)?(crm|c\.r\.m\.)',
         r'\bšto.*(u|na)\s+(mom\s+)?(crm|c\.r\.m\.)',
+        r'^iz\s+(mog\s+)?(crm|c\.r\.m\.)',  # Croatian: "iz CRM" at start
     ]
 
     for pattern in crm_read_patterns:
