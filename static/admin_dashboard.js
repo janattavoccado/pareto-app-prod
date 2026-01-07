@@ -957,18 +957,13 @@ async function viewCrmLead(leadId) {
             document.getElementById('crmLeadSubject').textContent = lead.lead_subject || 'No Subject';
             document.getElementById('crmLeadTenant').textContent = lead.tenant_name || '-';
             document.getElementById('crmLeadCreatedBy').textContent = lead.user_name || '-';
-            document.getElementById('crmLeadOwner').textContent = lead.owner || '-';
+            document.getElementById('crmLeadOwner').value = lead.owner || '';
             document.getElementById('crmLeadStatus').value = lead.status || 'Open';
             document.getElementById('crmLeadCreated').textContent = lead.created_at ? 
                 new Date(lead.created_at).toLocaleString() : '-';
             
-            // Priority badge
-            const priorityEl = document.getElementById('crmLeadPriority');
-            priorityEl.textContent = lead.priority || '-';
-            priorityEl.className = 'badge ' + (
-                lead.priority === 'High' ? 'badge-danger' : 
-                lead.priority === 'Mid' ? 'badge-warning' : 'badge-info'
-            );
+            // Priority select
+            document.getElementById('crmLeadPriority').value = lead.priority || 'Mid';
             
             // Content
             let contentHtml = '';
@@ -1005,10 +1000,12 @@ async function viewCrmLead(leadId) {
     }
 }
 
-async function updateCrmLeadStatus() {
+async function updateCrmLead() {
     if (!currentCrmLeadId) return;
     
     const newStatus = document.getElementById('crmLeadStatus').value;
+    const newOwner = document.getElementById('crmLeadOwner').value;
+    const newPriority = document.getElementById('crmLeadPriority').value;
     
     try {
         const response = await fetch(`${API_BASE_URL}/admin/crm/leads/${currentCrmLeadId}`, {
@@ -1017,21 +1014,25 @@ async function updateCrmLeadStatus() {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${sessionToken}`
             },
-            body: JSON.stringify({ status: newStatus })
+            body: JSON.stringify({ 
+                status: newStatus,
+                owner: newOwner,
+                priority: newPriority
+            })
         });
         
         const data = await response.json();
         
         if (data.success) {
-            showAlert('Lead status updated successfully!', 'success');
+            showAlert('Lead updated successfully!', 'success');
             closeModal('crmLeadModal');
             loadCrmLeads();
         } else {
-            showAlert(data.message || 'Failed to update lead status', 'error');
+            showAlert(data.message || 'Failed to update lead', 'error');
         }
     } catch (error) {
         console.error('Error updating CRM lead:', error);
-        showAlert('Failed to update lead status', 'error');
+        showAlert('Failed to update lead', 'error');
     }
 }
 

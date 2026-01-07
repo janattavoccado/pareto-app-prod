@@ -251,16 +251,11 @@ async function viewLead(leadId) {
             document.getElementById('leadDetailId').value = lead.id;
             document.getElementById('leadDetailSubject').textContent = lead.lead_subject || 'No Subject';
             document.getElementById('leadDetailCreatedBy').textContent = lead.user_name || '-';
-            document.getElementById('leadDetailOwner').textContent = lead.owner || '-';
+            document.getElementById('leadDetailOwner').value = lead.owner || '';
             document.getElementById('leadDetailStatus').value = lead.status || 'Open';
             
-            // Priority badge
-            const priorityEl = document.getElementById('leadDetailPriority');
-            priorityEl.textContent = lead.priority || '-';
-            priorityEl.className = 'badge ' + (
-                lead.priority === 'High' ? 'badge-danger' : 
-                lead.priority === 'Mid' ? 'badge-warning' : 'badge-info'
-            );
+            // Priority select
+            document.getElementById('leadDetailPriority').value = lead.priority || 'Mid';
             
             // Content
             let contentHtml = '';
@@ -297,10 +292,12 @@ async function viewLead(leadId) {
     }
 }
 
-async function updateLeadStatus() {
+async function updateLead() {
     if (!currentLeadId) return;
     
     const newStatus = document.getElementById('leadDetailStatus').value;
+    const newOwner = document.getElementById('leadDetailOwner').value;
+    const newPriority = document.getElementById('leadDetailPriority').value;
     
     try {
         const response = await fetch(`${API_BASE_URL}/crm/leads/${currentLeadId}`, {
@@ -309,13 +306,17 @@ async function updateLeadStatus() {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${userToken}`
             },
-            body: JSON.stringify({ status: newStatus })
+            body: JSON.stringify({ 
+                status: newStatus,
+                owner: newOwner,
+                priority: newPriority
+            })
         });
         
         const data = await response.json();
         
         if (data.success) {
-            showAlert('Lead status updated!', 'success');
+            showAlert('Lead updated successfully!', 'success');
             closeModal('leadDetailModal');
             loadUserLeads();
         } else {

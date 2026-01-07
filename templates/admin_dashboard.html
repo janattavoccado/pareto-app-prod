@@ -515,11 +515,15 @@
                     </div>
                     <div class="form-group">
                         <label>Owner</label>
-                        <p id="crmLeadOwner"></p>
+                        <input type="text" id="crmLeadOwner" class="form-control" placeholder="Enter owner name">
                     </div>
                     <div class="form-group">
                         <label>Priority</label>
-                        <span id="crmLeadPriority" class="badge"></span>
+                        <select id="crmLeadPriority" class="form-control">
+                            <option value="High">High</option>
+                            <option value="Mid">Mid</option>
+                            <option value="Low">Low</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label>Status</label>
@@ -546,7 +550,7 @@
                 <input type="hidden" id="crmLeadId">
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" onclick="closeModal('crmLeadModal')">Close</button>
-                    <button type="button" class="btn btn-primary" onclick="updateCrmLeadStatus()">Update Status</button>
+                    <button type="button" class="btn btn-primary" onclick="updateCrmLead()">Save Changes</button>
                 </div>
             </div>
         </div>

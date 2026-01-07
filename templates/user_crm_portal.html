@@ -226,11 +226,15 @@
                     </div>
                     <div class="form-group">
                         <label>Owner</label>
-                        <p id="leadDetailOwner"></p>
+                        <input type="text" id="leadDetailOwner" class="form-control" placeholder="Enter owner name">
                     </div>
                     <div class="form-group">
                         <label>Priority</label>
-                        <span id="leadDetailPriority" class="badge"></span>
+                        <select id="leadDetailPriority" class="form-control">
+                            <option value="High">High</option>
+                            <option value="Mid">Mid</option>
+                            <option value="Low">Low</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label>Status</label>
@@ -253,7 +257,7 @@
                 <input type="hidden" id="leadDetailId">
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" onclick="closeModal('leadDetailModal')">Close</button>
-                    <button type="button" class="btn btn-primary" onclick="updateLeadStatus()">Update Status</button>
+                    <button type="button" class="btn btn-primary" onclick="updateLead()">Save Changes</button>
                 </div>
             </div>
         </div>
