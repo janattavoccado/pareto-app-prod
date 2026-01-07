@@ -223,6 +223,7 @@ class TimezoneService:
     def _parse_absolute_format(self, datetime_str: str, cet_now: datetime, offset: int) -> datetime:
         """
         Parse absolute format: "7 June at 4pm", "June 7 at 4pm", "7/6/2025 at 4pm"
+        Also handles dates without times: "20 November 2026", "November 20, 2026"
         """
         try:
             # Try to extract date and time
@@ -252,6 +253,45 @@ class TimezoneService:
                 logger.debug(f"Parsed absolute format (pattern 1): {result}")
                 return result
             
+            # Pattern 1b: "7 June 2025" or "20 November 2026" (date only, no time - all day event)
+            pattern1b = r'(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})'
+            match = re.search(pattern1b, datetime_str, re.IGNORECASE)
+            
+            if match:
+                day = int(match.group(1))
+                month_str = match.group(2)
+                year = int(match.group(3))
+                
+                # Convert month string to number
+                month = self._month_to_number(month_str)
+                
+                # Default to 9:00 AM for all-day events
+                result = datetime(year, month, day, 9, 0, 0)
+                logger.debug(f"Parsed absolute format (pattern 1b - date only): {result}")
+                return result
+            
+            # Pattern 1c: "7 June" or "20 November" (date only, no year - assumes current/next year)
+            pattern1c = r'(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)(?!\s*\d)'
+            match = re.search(pattern1c, datetime_str, re.IGNORECASE)
+            
+            if match:
+                day = int(match.group(1))
+                month_str = match.group(2)
+                
+                # Convert month string to number
+                month = self._month_to_number(month_str)
+                
+                # Determine year: use current year if date is in future, otherwise next year
+                year = cet_now.year
+                target_date = datetime(year, month, day)
+                if target_date < cet_now:
+                    year += 1
+                
+                # Default to 9:00 AM for all-day events
+                result = datetime(year, month, day, 9, 0, 0)
+                logger.debug(f"Parsed absolute format (pattern 1c - date only, no year): {result}")
+                return result
+            
             # Pattern 2: "June 7 at 4pm" or "June 7 2025 at 4pm"
             pattern2 = r'(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})(?:\s+(\d{4}))?\s+at\s+(\d{1,2}):?(\d{0,2})\s*(am|pm)?'
             match = re.search(pattern2, datetime_str, re.IGNORECASE)
@@ -276,6 +316,45 @@ class TimezoneService:
                 
                 result = datetime(year, month, day, hour, minute, 0)
                 logger.debug(f"Parsed absolute format (pattern 2): {result}")
+                return result
+            
+            # Pattern 2b: "November 20, 2026" or "November 20 2026" (date only, no time)
+            pattern2b = r'(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}),?\s+(\d{4})'
+            match = re.search(pattern2b, datetime_str, re.IGNORECASE)
+            
+            if match:
+                month_str = match.group(1)
+                day = int(match.group(2))
+                year = int(match.group(3))
+                
+                # Convert month string to number
+                month = self._month_to_number(month_str)
+                
+                # Default to 9:00 AM for all-day events
+                result = datetime(year, month, day, 9, 0, 0)
+                logger.debug(f"Parsed absolute format (pattern 2b - date only): {result}")
+                return result
+            
+            # Pattern 2c: "November 20" (date only, no year)
+            pattern2c = r'(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})(?!\s*\d)'
+            match = re.search(pattern2c, datetime_str, re.IGNORECASE)
+            
+            if match:
+                month_str = match.group(1)
+                day = int(match.group(2))
+                
+                # Convert month string to number
+                month = self._month_to_number(month_str)
+                
+                # Determine year: use current year if date is in future, otherwise next year
+                year = cet_now.year
+                target_date = datetime(year, month, day)
+                if target_date < cet_now:
+                    year += 1
+                
+                # Default to 9:00 AM for all-day events
+                result = datetime(year, month, day, 9, 0, 0)
+                logger.debug(f"Parsed absolute format (pattern 2c - date only, no year): {result}")
                 return result
             
             return None
