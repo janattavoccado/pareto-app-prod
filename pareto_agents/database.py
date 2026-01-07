@@ -283,13 +283,19 @@ class DatabaseManager:
         self._create_tables()
     
     def _create_tables(self):
-        """Create all tables in the database"""
+        """Create all tables in the database (if they don't exist)"""
         try:
-            Base.metadata.create_all(self.engine)
-            logger.info("✅ Database tables created successfully")
+            # Use checkfirst=True to avoid errors when tables already exist
+            # This is important for PostgreSQL which doesn't handle duplicate CREATE TABLE gracefully
+            Base.metadata.create_all(self.engine, checkfirst=True)
+            logger.info("✅ Database tables created/verified successfully")
         except Exception as e:
             logger.error(f"❌ Error creating database tables: {e}")
-            raise
+            # Don't raise on duplicate table errors - they're expected in multi-worker environments
+            if 'already exists' in str(e).lower() or 'duplicate key' in str(e).lower():
+                logger.warning("Tables already exist, continuing...")
+            else:
+                raise
     
     def get_session(self) -> Session:
         """Get a new database session"""
