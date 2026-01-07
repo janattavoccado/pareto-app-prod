@@ -5,7 +5,7 @@ This file has been updated to:
 1. Use the correct import names from the final config_loader.py.
 2. Handle Heroku's dynamic PORT environment variable.
 3. Include a /config-status endpoint for debugging.
-4. Register all blueprints for admin, CRM, and user authentication.
+4. Register all blueprints for admin, Tenant CRM, and user authentication.
 5. Serve static files and templates for dashboards.
 """
 
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 logger.info(f"Starting Flask app in {ENVIRONMENT} environment.")
 
 # --- App Initialization ---
-app = Flask(__name__, 
+app = Flask(__name__,
             template_folder='templates',
             static_folder='static')
 
@@ -95,13 +95,13 @@ def chatwoot_webhook():
         if not data:
             logger.warning("Received empty or non-JSON webhook payload.")
             return jsonify({"status": "error", "message": "Invalid payload"}), 400
-        
+
         # The webhook_handler now accepts the data payload
         response = webhook_handler(data)
-        
+
         # Chatwoot expects a 200 OK response quickly, even if processing is async
         return jsonify({"status": "success", "message": "Webhook received and processing started"}), 200
-        
+
     except Exception as e:
         logger.error(f"Error processing webhook: {e}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 500
