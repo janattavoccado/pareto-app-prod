@@ -1,6 +1,6 @@
 """
 Pareto Agents - OpenAI Agents SDK Integration for Pareto
-Updated with improved routing logic for Email, Calendar, and Personal Assistant agents
+Updated with improved routing logic for Email, Calendar, Personal Assistant, and CRM agents
 
 File location: pareto_agents/agents.py
 """
@@ -8,8 +8,9 @@ File location: pareto_agents/agents.py
 import logging
 import asyncio
 import re
+import json
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import pytz
 
 from agents import Agent, Runner
@@ -91,6 +92,7 @@ personal_assistant_agent = Agent(
         "3. Daily summaries - 'Give me a summary of my day', 'What's on my agenda?' "
         "4. General conversation - Greetings, questions, and general assistance "
         "5. Date and time questions - 'What is today's date?', 'What time is it?' "
+        "6. CRM operations - Store information to CRM, retrieve leads from CRM "
         "\n"
         "CRITICAL: The message will contain a [SYSTEM: ...] section with the CURRENT DATE AND TIME. "
         "When a user asks about the current date, time, or day of week, use this information to provide an accurate answer. "
@@ -111,7 +113,7 @@ def classify_message(message: str) -> str:
     Classify the message to determine which agent should handle it.
 
     Returns:
-        str: One of 'mail_me', 'calendar_action', 'email_action', 'personal_assistant'
+        str: One of 'mail_me', 'calendar_action', 'email_action', 'crm_store', 'crm_read', 'personal_assistant'
     """
     message_lower = message.lower().strip()
 
@@ -119,7 +121,60 @@ def classify_message(message: str) -> str:
     if MailMeHandler.is_mail_me_command(message):
         return 'mail_me'
 
-    # 2. Check for direct calendar ACTIONS (booking, creating, updating, deleting)
+    # 2. Check for CRM STORE commands (store, save, add to CRM)
+    # Includes English, Swedish, and Croatian keywords
+    crm_store_patterns = [
+        # English patterns
+        r'\b(store|save|add|put|log|record)\b.*(in|to|into)\s*(the\s+)?(crm|c\.r\.m\.)',
+        r'\b(crm|c\.r\.m\.)\b.*(store|save|add|put|log|record)',
+        r'\badd\s+(this\s+)?(to\s+)?(my\s+)?(crm|c\.r\.m\.)',
+        r'\bsave\s+(this\s+)?(to\s+)?(my\s+)?(crm|c\.r\.m\.)',
+        r'\bstore\s+(this\s+)?(in\s+)?(my\s+)?(crm|c\.r\.m\.)',
+        r'\blog\s+(this\s+)?(in|to)\s+(my\s+)?(crm|c\.r\.m\.)',
+        # Swedish patterns (spara=save, lägg till=add, lagra=store)
+        r'\b(spara|lägg till|lagra|registrera)\b.*(i|till)\s*(min\s+)?(crm|c\.r\.m\.)',
+        r'\b(crm|c\.r\.m\.)\b.*(spara|lägg|lagra)',
+        r'\bspara\s+(detta\s+)?(i\s+)?(min\s+)?(crm|c\.r\.m\.)',
+        # Croatian patterns (spremi=save, dodaj=add, pohrani=store)
+        r'\b(spremi|dodaj|pohrani|zabilježi)\b.*(u|na)\s*(moj\s+)?(crm|c\.r\.m\.)',
+        r'\b(crm|c\.r\.m\.)\b.*(spremi|dodaj|pohrani)',
+        r'\bspremi\s+(ovo\s+)?(u\s+)?(moj\s+)?(crm|c\.r\.m\.)',
+    ]
+
+    for pattern in crm_store_patterns:
+        if re.search(pattern, message_lower):
+            logger.info(f"[classify] Matched CRM store pattern: {pattern}")
+            return 'crm_store'
+
+    # 3. Check for CRM READ commands (read, get, show, list from CRM)
+    # Includes English, Swedish, and Croatian keywords
+    crm_read_patterns = [
+        # English patterns
+        r'\b(read|get|show|list|display|fetch|retrieve|view)\b.*(from|in)\s*(the\s+)?(crm|c\.r\.m\.)',
+        r'\b(crm|c\.r\.m\.)\b.*(read|get|show|list|display|fetch|retrieve|view|leads?|data)',
+        r'\b(my|the)\s+(crm|c\.r\.m\.)\s*(leads?|data|entries|records)?',
+        r'\bshow\s+(me\s+)?(my\s+)?(crm|c\.r\.m\.)',
+        r'\bwhat.*(in|on)\s+(my\s+)?(crm|c\.r\.m\.)',
+        r'\b(crm|c\.r\.m\.)\s*(leads?|status|summary|overview)',
+        r'\bleads?\s+(from|in)\s+(my\s+)?(crm|c\.r\.m\.)',
+        # Swedish patterns (visa=show, hämta=get/fetch, läs=read)
+        r'\b(visa|hämta|läs|lista)\b.*(från|i)\s*(min\s+)?(crm|c\.r\.m\.)',
+        r'\b(crm|c\.r\.m\.)\b.*(visa|hämta|läs|lista|leads?)',
+        r'\bvisa\s+(mig\s+)?(min\s+)?(crm|c\.r\.m\.)',
+        r'\bvad.*(i|på)\s+(min\s+)?(crm|c\.r\.m\.)',
+        # Croatian patterns (prikaži=show, dohvati=get/fetch, pročitaj=read)
+        r'\b(prikaži|dohvati|pročitaj|izlistaj)\b.*(iz|u)\s*(moj\s+)?(crm|c\.r\.m\.)',
+        r'\b(crm|c\.r\.m\.)\b.*(prikaži|dohvati|pročitaj|izlistaj|leads?)',
+        r'\bprikaži\s+(mi\s+)?(moj\s+)?(crm|c\.r\.m\.)',
+        r'\bšto.*(u|na)\s+(mom\s+)?(crm|c\.r\.m\.)',
+    ]
+
+    for pattern in crm_read_patterns:
+        if re.search(pattern, message_lower):
+            logger.info(f"[classify] Matched CRM read pattern: {pattern}")
+            return 'crm_read'
+
+    # 4. Check for direct calendar ACTIONS (booking, creating, updating, deleting)
     # Includes English, Swedish, and Croatian keywords for multilingual support
     calendar_action_patterns = [
         # English patterns
@@ -155,7 +210,7 @@ def classify_message(message: str) -> str:
             logger.info(f"[classify] Matched calendar action pattern: {pattern}")
             return 'calendar_action'
 
-    # 3. Check for direct email ACTIONS (sending, composing)
+    # 5. Check for direct email ACTIONS (sending, composing)
     # Includes English, Swedish, and Croatian keywords for multilingual support
     email_action_patterns = [
         # English patterns
@@ -177,7 +232,7 @@ def classify_message(message: str) -> str:
             logger.info(f"[classify] Matched email action pattern: {pattern}")
             return 'email_action'
 
-    # 4. Everything else goes to Personal Assistant (queries, summaries, greetings)
+    # 6. Everything else goes to Personal Assistant (queries, summaries, greetings)
     # This includes:
     # - "What meetings do I have today?"
     # - "Summarize my emails"
@@ -187,6 +242,279 @@ def classify_message(message: str) -> str:
     # - General questions
 
     return 'personal_assistant'
+
+
+# ============================================================================
+# CRM Helper Functions
+# ============================================================================
+
+def extract_crm_content(message: str) -> str:
+    """
+    Extract the content to store in CRM from the message.
+    Removes the CRM command prefix to get the actual content.
+    
+    Args:
+        message: The full user message
+        
+    Returns:
+        str: The content to store (without CRM command prefix)
+    """
+    # Patterns to remove from the beginning
+    prefixes_to_remove = [
+        # English
+        r'^(store|save|add|put|log|record)\s+(this\s+)?(in|to|into)\s+(the\s+)?(my\s+)?(crm|c\.r\.m\.)\s*[:\-]?\s*',
+        r'^(add|save|store|log)\s+(to\s+)?(my\s+)?(crm|c\.r\.m\.)\s*[:\-]?\s*',
+        r'^(crm|c\.r\.m\.)\s*[:\-]?\s*(store|save|add)\s*[:\-]?\s*',
+        # Swedish
+        r'^(spara|lägg till|lagra|registrera)\s+(detta\s+)?(i|till)\s+(min\s+)?(crm|c\.r\.m\.)\s*[:\-]?\s*',
+        r'^(crm|c\.r\.m\.)\s*[:\-]?\s*(spara|lägg)\s*[:\-]?\s*',
+        # Croatian
+        r'^(spremi|dodaj|pohrani|zabilježi)\s+(ovo\s+)?(u|na)\s+(moj\s+)?(crm|c\.r\.m\.)\s*[:\-]?\s*',
+        r'^(crm|c\.r\.m\.)\s*[:\-]?\s*(spremi|dodaj)\s*[:\-]?\s*',
+    ]
+    
+    content = message.strip()
+    
+    for pattern in prefixes_to_remove:
+        content = re.sub(pattern, '', content, flags=re.IGNORECASE)
+    
+    return content.strip()
+
+
+def format_leads_for_response(leads: List[Any], include_details: bool = False) -> str:
+    """
+    Format CRM leads into a readable response for the user.
+    
+    Args:
+        leads: List of CRMLead objects
+        include_details: Whether to include full details or just summary
+        
+    Returns:
+        str: Formatted response string
+    """
+    if not leads:
+        return "📋 You don't have any leads in your CRM yet."
+    
+    response_parts = [f"📋 **Your CRM Leads** ({len(leads)} total):\n"]
+    
+    for i, lead in enumerate(leads, 1):
+        priority_emoji = {
+            'High': '🔴',
+            'Mid': '🟡',
+            'Low': '🟢'
+        }.get(lead.priority, '⚪')
+        
+        status_emoji = {
+            'Open': '📬',
+            'In Progress': '⏳',
+            'Closed': '✅',
+            'Rejected': '❌'
+        }.get(lead.status, '📄')
+        
+        lead_line = f"\n{i}. {priority_emoji} **{lead.lead_subject}**"
+        lead_line += f"\n   {status_emoji} Status: {lead.status} | Owner: {lead.owner}"
+        
+        if lead.created_at:
+            lead_line += f"\n   📅 Created: {lead.created_at.strftime('%Y-%m-%d %H:%M')}"
+        
+        if include_details and lead.lead_content:
+            try:
+                content = json.loads(lead.lead_content) if isinstance(lead.lead_content, str) else lead.lead_content
+                if content.get('summary'):
+                    lead_line += f"\n   📝 {content['summary'][:100]}..."
+            except:
+                pass
+        
+        response_parts.append(lead_line)
+    
+    return "\n".join(response_parts)
+
+
+async def handle_crm_store(message: str, user_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Handle CRM store command - extract content and store as a new lead.
+    
+    Args:
+        message: The user's message
+        user_data: User information from database
+        
+    Returns:
+        dict: Processing result
+    """
+    from pareto_agents.database import get_db_manager
+    from pareto_agents.crm_service import CRMService
+    
+    try:
+        # Extract the content to store (remove CRM command prefix)
+        content_to_store = extract_crm_content(message)
+        
+        if not content_to_store or len(content_to_store) < 5:
+            return {
+                "is_mail_me": False,
+                "agent_response": "❌ Please provide some content to store in CRM. For example: 'Store in CRM: New lead from TechCorp interested in our services'",
+                "action_type": "crm_store",
+                "success": False
+            }
+        
+        # Get user info
+        tenant_id = user_data.get('tenant_id')
+        user_id = user_data.get('id')
+        user_name = f"{user_data.get('first_name', '')} {user_data.get('last_name', '')}".strip()
+        
+        if not tenant_id or not user_id:
+            return {
+                "is_mail_me": False,
+                "agent_response": "❌ Unable to identify your tenant. Please contact support.",
+                "action_type": "crm_store",
+                "success": False
+            }
+        
+        # Create the lead using CRM service
+        db_manager = get_db_manager()
+        db_session = db_manager.get_session()
+        
+        try:
+            crm_service = CRMService(db_session)
+            lead = crm_service.create_lead(
+                message=content_to_store,
+                tenant_id=tenant_id,
+                user_id=user_id
+            )
+            
+            # Format success response
+            priority_emoji = {'High': '🔴', 'Mid': '🟡', 'Low': '🟢'}.get(lead.priority, '⚪')
+            
+            response = (
+                f"✅ **Lead stored in CRM successfully!**\n\n"
+                f"📋 **Subject:** {lead.lead_subject}\n"
+                f"{priority_emoji} **Priority:** {lead.priority}\n"
+                f"👤 **Owner:** {lead.owner}\n"
+                f"📊 **Status:** {lead.status}\n"
+                f"🆔 **Lead ID:** {lead.id}"
+            )
+            
+            return {
+                "is_mail_me": False,
+                "agent_response": response,
+                "action_type": "crm_store",
+                "success": True,
+                "lead_id": lead.id
+            }
+            
+        finally:
+            db_session.close()
+            
+    except Exception as e:
+        logger.error(f"[agents.py] Error storing CRM lead: {str(e)}", exc_info=True)
+        return {
+            "is_mail_me": False,
+            "agent_response": f"❌ Error storing lead in CRM: {str(e)}",
+            "action_type": "crm_store",
+            "success": False,
+            "error": str(e)
+        }
+
+
+async def handle_crm_read(message: str, user_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Handle CRM read command - retrieve and display leads for the user's tenant.
+    
+    Args:
+        message: The user's message
+        user_data: User information from database
+        
+    Returns:
+        dict: Processing result
+    """
+    from pareto_agents.database import get_db_manager
+    from pareto_agents.crm_service import CRMService
+    
+    try:
+        tenant_id = user_data.get('tenant_id')
+        
+        if not tenant_id:
+            return {
+                "is_mail_me": False,
+                "agent_response": "❌ Unable to identify your tenant. Please contact support.",
+                "action_type": "crm_read",
+                "success": False
+            }
+        
+        # Parse any filters from the message
+        message_lower = message.lower()
+        status_filter = None
+        priority_filter = None
+        
+        # Check for status filters
+        if 'open' in message_lower:
+            status_filter = 'Open'
+        elif 'in progress' in message_lower or 'progress' in message_lower:
+            status_filter = 'In Progress'
+        elif 'closed' in message_lower:
+            status_filter = 'Closed'
+        elif 'rejected' in message_lower:
+            status_filter = 'Rejected'
+        
+        # Check for priority filters
+        if 'high' in message_lower or 'urgent' in message_lower:
+            priority_filter = 'High'
+        elif 'low' in message_lower:
+            priority_filter = 'Low'
+        
+        # Get leads from CRM
+        db_manager = get_db_manager()
+        db_session = db_manager.get_session()
+        
+        try:
+            crm_service = CRMService(db_session)
+            leads = crm_service.get_leads_by_tenant(
+                tenant_id=tenant_id,
+                status=status_filter,
+                priority=priority_filter,
+                limit=10  # Limit to 10 most recent leads for chat
+            )
+            
+            # Get stats
+            stats = crm_service.get_lead_stats(tenant_id=tenant_id)
+            
+            # Format response
+            if not leads:
+                filter_info = ""
+                if status_filter:
+                    filter_info += f" with status '{status_filter}'"
+                if priority_filter:
+                    filter_info += f" with priority '{priority_filter}'"
+                
+                response = f"📋 No leads found{filter_info} in your CRM."
+            else:
+                response = format_leads_for_response(leads, include_details=True)
+                
+                # Add stats summary
+                response += f"\n\n📊 **Summary:** {stats['total']} total leads"
+                response += f" | Open: {stats['by_status'].get('Open', 0)}"
+                response += f" | In Progress: {stats['by_status'].get('In Progress', 0)}"
+                response += f" | High Priority: {stats['by_priority'].get('High', 0)}"
+            
+            return {
+                "is_mail_me": False,
+                "agent_response": response,
+                "action_type": "crm_read",
+                "success": True,
+                "lead_count": len(leads)
+            }
+            
+        finally:
+            db_session.close()
+            
+    except Exception as e:
+        logger.error(f"[agents.py] Error reading CRM leads: {str(e)}", exc_info=True)
+        return {
+            "is_mail_me": False,
+            "agent_response": f"❌ Error reading from CRM: {str(e)}",
+            "action_type": "crm_read",
+            "success": False,
+            "error": str(e)
+        }
 
 
 # ============================================================================
@@ -246,7 +574,17 @@ async def process_message(
                 "mail_me_request": mail_me_request,
             }
 
-        # 2. Handle calendar actions (book, create, update, delete)
+        # 2. Handle CRM store command
+        if message_type == 'crm_store':
+            logger.info("[agents.py] Routing to CRM Store handler.")
+            return await handle_crm_store(message, user_data)
+
+        # 3. Handle CRM read command
+        if message_type == 'crm_read':
+            logger.info("[agents.py] Routing to CRM Read handler.")
+            return await handle_crm_read(message, user_data)
+
+        # 4. Handle calendar actions (book, create, update, delete)
         if message_type == 'calendar_action':
             logger.info("[agents.py] Routing to Calendar Manager for action.")
             runner = Runner()
@@ -265,7 +603,7 @@ async def process_message(
                 "raw_result": result,
             }
 
-        # 3. Handle email actions (send, compose)
+        # 5. Handle email actions (send, compose)
         if message_type == 'email_action':
             logger.info("[agents.py] Routing to Email Manager for action.")
             runner = Runner()
@@ -284,7 +622,7 @@ async def process_message(
                 "raw_result": result,
             }
 
-        # 4. Handle queries, summaries, and general conversation via Personal Assistant
+        # 6. Handle queries, summaries, and general conversation via Personal Assistant
         logger.info("[agents.py] Routing to Personal Assistant.")
         runner = Runner()
         result = await runner.run(
