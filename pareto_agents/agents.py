@@ -164,8 +164,11 @@ def classify_message(message: str) -> str:
         r'\b(my|the)\s+(crm|c\.r\.m\.)\s*(leads?|data|entries|records|items?)?',
         r'\bshow\s+(me\s+)?(my\s+)?(crm|c\.r\.m\.)',
         r'\bwhat.*(in|on)\s+(my\s+)?(crm|c\.r\.m\.)',
-        r'\b(crm|c\.r\.m\.)\s*(leads?|status|summary|overview|items?)',
+        r'\b(crm|c\.r\.m\.)\s*(leads?|status|summary|overview|items?|content)',
         r'\bleads?\s+(from|in)\s+(my\s+)?(crm|c\.r\.m\.)',
+        # English patterns - "get me CRM", "show me CRM", etc.
+        r'\b(get|show|read|fetch|give)\s+me\s+(the\s+)?(my\s+)?(crm|c\.r\.m\.)',
+        r'\b(get|show|read|fetch)\s+(me\s+)?(my\s+)?(crm|c\.r\.m\.)\s*(content|data|leads?|items?)?',
         # English patterns - flexible (catch "from CRM..." at start or anywhere)
         r'^from\s+(the\s+)?(crm|c\.r\.m\.)',  # Message starting with "from CRM"
         r'\bfrom\s+(my\s+)?(crm|c\.r\.m\.)\b',  # "from my CRM" anywhere
@@ -477,8 +480,12 @@ async def handle_crm_read(message: str, user_data: Dict[str, Any]) -> Dict[str, 
         # Check for priority filters
         if 'high' in message_lower or 'urgent' in message_lower:
             priority_filter = 'High'
+        elif 'mid' in message_lower or 'medium' in message_lower:
+            priority_filter = 'Mid'
         elif 'low' in message_lower:
             priority_filter = 'Low'
+        
+        logger.info(f"[agents.py] CRM read for tenant {tenant_id}, status_filter={status_filter}, priority_filter={priority_filter}")
         
         # Get leads from CRM
         db_manager = get_db_manager()
