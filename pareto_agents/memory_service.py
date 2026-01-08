@@ -49,19 +49,31 @@ class MemoryService:
             return
         
         try:
-            # Initialize Mem0 client with optional org and project IDs
+            # Initialize Mem0 client
+            # Note: Mem0 Platform API requires api_key, and optionally org_id and project_id
             client_kwargs = {"api_key": api_key}
+            
+            # Add org_id and project_id if provided
+            # Both are optional for basic usage, but recommended for organization
             if self.org_id:
                 client_kwargs["org_id"] = self.org_id
+                logger.info(f"Using Mem0 org_id: {self.org_id[:20]}...")
             if self.project_id:
                 client_kwargs["project_id"] = self.project_id
+                logger.info(f"Using Mem0 project_id: {self.project_id[:20]}...")
             
             self.client = MemoryClient(**client_kwargs)
             self.enabled = True
             logger.info("✅ Memory service initialized successfully")
             
         except Exception as e:
-            logger.error(f"❌ Failed to initialize memory service: {e}")
+            error_msg = str(e)
+            logger.error(f"❌ Failed to initialize memory service: {error_msg}")
+            
+            # Provide helpful guidance for common errors
+            if "org_id" in error_msg.lower() or "project_id" in error_msg.lower():
+                logger.error("💡 Hint: Set MEM0_ORG_ID environment variable. Find it in Mem0 dashboard under Settings > Organization.")
+            
             self.enabled = False
     
     def _normalize_user_id(self, phone_number: str) -> str:
