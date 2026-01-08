@@ -233,6 +233,12 @@ class MemoryService:
                 memories = []
             
             logger.info(f"🔍 Found {len(memories)} relevant memories for user {user_id[:8]}...")
+            
+            # Log memory content for debugging (truncated)
+            for i, mem in enumerate(memories[:3]):
+                mem_text = mem.get('memory', mem.get('text', str(mem)))[:100]
+                logger.debug(f"  Memory {i+1}: {mem_text}...")
+            
             return memories
             
         except Exception as e:
