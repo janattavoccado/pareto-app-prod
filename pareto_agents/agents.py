@@ -15,6 +15,7 @@ import pytz
 
 from agents import Agent, Runner
 from .mail_me_handler import MailMeHandler
+from .memory_service import get_memory_service, add_conversation_memory, get_memory_context
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +87,7 @@ personal_assistant_agent = Agent(
     name="Personal Assistant",
     handoff_description="Specialist agent for queries, summaries, and general assistance",
     instructions=(
-        "You are a helpful personal assistant. You help users with: "
+        "You are a helpful personal assistant with MEMORY capabilities. You help users with: "
         "1. Calendar queries - 'What meetings do I have today?', 'Show my schedule for tomorrow' "
         "2. Email queries - 'Summarize my unread emails', 'What new emails do I have?' "
         "3. Daily summaries - 'Give me a summary of my day', 'What's on my agenda?' "
@@ -559,8 +560,16 @@ async def process_message(
         message_type = classify_message(message)
         logger.info(f"[agents.py] Message classified as: {message_type}")
         
-        # Prepend datetime context to message for agent processing
-        message_with_context = f"[SYSTEM: {datetime_context}]\n\nUser message: {message}"
+        # Get memory context for personalization
+        memory_context = get_memory_context(message, phone_number)
+        if memory_context:
+            logger.info(f"[agents.py] Retrieved memory context for user")
+        
+        # Prepend datetime context and memory to message for agent processing
+        if memory_context:
+            message_with_context = f"[SYSTEM: {datetime_context}]\n\n[MEMORY: {memory_context}]\n\nUser message: {message}"
+        else:
+            message_with_context = f"[SYSTEM: {datetime_context}]\n\nUser message: {message}"
 
         # 1. Handle 'mail me' command
         if message_type == 'mail_me':
@@ -606,6 +615,17 @@ async def process_message(
             agent_response = _extract_response(result)
             logger.info(f"[agents.py] Calendar Manager response: '{agent_response[:100]}...'")
 
+            # Store calendar action in memory
+            try:
+                add_conversation_memory(
+                    user_message=message,
+                    assistant_response=agent_response,
+                    phone_number=phone_number,
+                    metadata={"action_type": "calendar"}
+                )
+            except Exception as mem_error:
+                logger.warning(f"[agents.py] Failed to store memory: {mem_error}")
+
             return {
                 "is_mail_me": False,
                 "agent_response": agent_response,
@@ -625,6 +645,17 @@ async def process_message(
             agent_response = _extract_response(result)
             logger.info(f"[agents.py] Email Manager response: '{agent_response[:100]}...'")
 
+            # Store email action in memory
+            try:
+                add_conversation_memory(
+                    user_message=message,
+                    assistant_response=agent_response,
+                    phone_number=phone_number,
+                    metadata={"action_type": "email"}
+                )
+            except Exception as mem_error:
+                logger.warning(f"[agents.py] Failed to store memory: {mem_error}")
+
             return {
                 "is_mail_me": False,
                 "agent_response": agent_response,
@@ -642,6 +673,17 @@ async def process_message(
 
         agent_response = _extract_response(result)
         logger.info(f"[agents.py] Personal Assistant response: '{agent_response[:100]}...'")
+
+        # Store conversation in memory for future context
+        try:
+            add_conversation_memory(
+                user_message=message,
+                assistant_response=agent_response,
+                phone_number=phone_number,
+                metadata={"action_type": "personal_assistant"}
+            )
+        except Exception as mem_error:
+            logger.warning(f"[agents.py] Failed to store memory: {mem_error}")
 
         return {
             "is_mail_me": False,
