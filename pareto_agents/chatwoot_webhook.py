@@ -130,6 +130,21 @@ def webhook_handler(payload):
             logger.warning("No content to process after handling attachments.")
             return {"status": "no_content"}
 
+        # --- Send Fast Acknowledgment ---
+        # Send immediate acknowledgment to user before processing
+        first_name = user_data.get('first_name', 'there')
+        ack_message = f"{first_name}, your request is received by the Pareto AI assistants. It will take approximately 15-20 seconds to execute and respond back to you."
+        
+        try:
+            ChatwootClient().send_message(
+                conversation_id=conversation_id,
+                message_text=ack_message
+            )
+            logger.info(f"Acknowledgment sent to {first_name} for conversation {conversation_id}")
+        except Exception as ack_error:
+            logger.warning(f"Failed to send acknowledgment: {ack_error}")
+            # Continue processing even if acknowledgment fails
+
         # --- Agent Processing ---
         agent_result = agents.process_message_sync(
             message=message_to_process,
