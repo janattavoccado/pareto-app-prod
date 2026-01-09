@@ -558,15 +558,74 @@ async def handle_crm_read(message: str, user_data: Dict[str, Any]) -> Dict[str, 
         }
 
 
+def split_help_into_sections(help_content: str, max_length: int = 1400) -> List[str]:
+    """
+    Split help content into sections that fit within message limits.
+    Splits on section dividers (lines with dashes) to keep sections intact.
+    
+    Args:
+        help_content: The full help text
+        max_length: Maximum characters per message (Chatwoot limit is ~1600, using 1400 for safety)
+        
+    Returns:
+        List[str]: List of message chunks
+    """
+    # Split by section dividers (lines of dashes)
+    sections = []
+    current_section = []
+    
+    lines = help_content.split('\n')
+    
+    for line in lines:
+        # Check if this is a section divider (line of dashes)
+        if line.strip() and all(c == '-' for c in line.strip()):
+            # Save current section and start new one
+            if current_section:
+                section_text = '\n'.join(current_section).strip()
+                if section_text:
+                    sections.append(section_text)
+                current_section = []
+        else:
+            current_section.append(line)
+    
+    # Don't forget the last section
+    if current_section:
+        section_text = '\n'.join(current_section).strip()
+        if section_text:
+            sections.append(section_text)
+    
+    # Now combine sections into messages that fit within max_length
+    messages = []
+    current_message = ""
+    
+    for section in sections:
+        # If adding this section would exceed limit, start new message
+        if len(current_message) + len(section) + 2 > max_length:
+            if current_message:
+                messages.append(current_message.strip())
+            current_message = section
+        else:
+            if current_message:
+                current_message += "\n\n" + section
+            else:
+                current_message = section
+    
+    # Don't forget the last message
+    if current_message:
+        messages.append(current_message.strip())
+    
+    return messages if messages else [help_content[:max_length]]
+
+
 async def handle_help_command(user_data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Handle help command - return the help/knowledgebase content.
+    Handle help command - return the help/knowledgebase content split into multiple messages.
     
     Args:
         user_data: User information from database
         
     Returns:
-        dict: Processing result with help content
+        dict: Processing result with help content (may include multiple messages)
     """
     import os
     
@@ -605,17 +664,32 @@ Basic commands:
         # Get user's first name for personalized greeting
         user_name = user_data.get('first_name', 'there') if user_data else 'there'
         
-        # Format the response
-        response = f"Hi {user_name}! Here's the Pareto help guide:\n\n{help_content}"
+        # Split help content into sections
+        help_sections = split_help_into_sections(help_content)
         
-        logger.info(f"[agents.py] Help command processed for user {user_name}")
+        # Add greeting to first section
+        if help_sections:
+            help_sections[0] = f"Hi {user_name}! Here's the Pareto help guide:\n\n{help_sections[0]}"
         
-        return {
-            "is_mail_me": False,
-            "agent_response": response,
-            "action_type": "help",
-            "success": True
-        }
+        logger.info(f"[agents.py] Help command processed for user {user_name}, split into {len(help_sections)} messages")
+        
+        # Return multiple messages if needed
+        if len(help_sections) == 1:
+            return {
+                "is_mail_me": False,
+                "agent_response": help_sections[0],
+                "action_type": "help",
+                "success": True
+            }
+        else:
+            # Return multiple messages
+            return {
+                "is_mail_me": False,
+                "agent_response": help_sections[0],  # First message
+                "additional_messages": help_sections[1:],  # Remaining messages
+                "action_type": "help",
+                "success": True
+            }
         
     except Exception as e:
         logger.error(f"[agents.py] Error loading help: {str(e)}", exc_info=True)

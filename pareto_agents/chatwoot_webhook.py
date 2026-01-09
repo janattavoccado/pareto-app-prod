@@ -252,6 +252,18 @@ def webhook_handler(payload):
                 conversation_id=conversation_id, message_text=final_response
             )
             logger.info(f"Final response sent to Chatwoot for conversation {conversation_id}.")
+            
+            # Check for additional messages (used by help command for long content)
+            additional_messages = agent_result.get("additional_messages", [])
+            if additional_messages:
+                import time
+                logger.info(f"Sending {len(additional_messages)} additional messages for {action_type}")
+                for i, extra_msg in enumerate(additional_messages):
+                    time.sleep(0.5)  # Small delay between messages to maintain order
+                    ChatwootClient().send_message(
+                        conversation_id=conversation_id, message_text=extra_msg
+                    )
+                    logger.info(f"Sent additional message {i+1}/{len(additional_messages)}")
         else:
             logger.warning("No final response was generated to send.")
 
