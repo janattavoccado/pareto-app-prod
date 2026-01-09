@@ -122,9 +122,24 @@ def classify_message(message: str) -> str:
     Classify the message to determine which agent should handle it.
 
     Returns:
-        str: One of 'mail_me', 'calendar_action', 'email_action', 'crm_store', 'crm_read', 'personal_assistant'
+        str: One of 'help', 'mail_me', 'calendar_action', 'email_action', 'crm_store', 'crm_read', 'personal_assistant'
     """
     message_lower = message.lower().strip()
+
+    # 0. Check for HELP command (highest priority)
+    # Matches: "help", "pareto --help", "pareto -help", "pareto help", "--help", "-help"
+    help_patterns = [
+        r'^help$',  # Just "help"
+        r'^pareto\s*[-]+\s*help$',  # "pareto --help", "pareto -help"
+        r'^pareto\s+help$',  # "pareto help"
+        r'^[-]+help$',  # "--help", "-help"
+        r'^hjälp$',  # Swedish: "hjälp"
+        r'^pomoć$',  # Croatian: "pomoć"
+    ]
+    for pattern in help_patterns:
+        if re.search(pattern, message_lower):
+            logger.info(f"[classify] Matched help pattern: {pattern}")
+            return 'help'
 
     # 1. Check for 'mail me' command (highest priority)
     if MailMeHandler.is_mail_me_command(message):
@@ -543,6 +558,76 @@ async def handle_crm_read(message: str, user_data: Dict[str, Any]) -> Dict[str, 
         }
 
 
+async def handle_help_command(user_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Handle help command - return the help/knowledgebase content.
+    
+    Args:
+        user_data: User information from database
+        
+    Returns:
+        dict: Processing result with help content
+    """
+    import os
+    
+    try:
+        # Get the path to help.txt
+        # First try relative to the pareto_agents directory
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        help_file_paths = [
+            os.path.join(base_dir, 'knowledgebases', 'help.txt'),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'knowledgebases', 'help.txt'),
+            '/app/knowledgebases/help.txt',  # Heroku path
+            'knowledgebases/help.txt',  # Relative path
+        ]
+        
+        help_content = None
+        for help_path in help_file_paths:
+            if os.path.exists(help_path):
+                with open(help_path, 'r', encoding='utf-8') as f:
+                    help_content = f.read()
+                logger.info(f"[agents.py] Loaded help from: {help_path}")
+                break
+        
+        if not help_content:
+            logger.warning("[agents.py] Help file not found in any expected location")
+            help_content = """**Pareto Help**
+
+Sorry, the help file could not be loaded. Please contact support.
+
+Basic commands:
+- "Add in CRM ..." - Store information in CRM
+- "Get CRM ..." - Retrieve CRM leads
+- "Mail me ..." - Send yourself an email
+- "Book a meeting ..." - Schedule calendar events
+"""
+        
+        # Get user's first name for personalized greeting
+        user_name = user_data.get('first_name', 'there') if user_data else 'there'
+        
+        # Format the response
+        response = f"Hi {user_name}! Here's the Pareto help guide:\n\n{help_content}"
+        
+        logger.info(f"[agents.py] Help command processed for user {user_name}")
+        
+        return {
+            "is_mail_me": False,
+            "agent_response": response,
+            "action_type": "help",
+            "success": True
+        }
+        
+    except Exception as e:
+        logger.error(f"[agents.py] Error loading help: {str(e)}", exc_info=True)
+        return {
+            "is_mail_me": False,
+            "agent_response": f"❌ Error loading help: {str(e)}",
+            "action_type": "help",
+            "success": False,
+            "error": str(e)
+        }
+
+
 # ============================================================================
 # Process Message Function
 # ============================================================================
@@ -585,6 +670,11 @@ async def process_message(
             message_with_context = f"[SYSTEM: {datetime_context}]\n\n[MEMORY: {memory_context}]\n\nUser message: {message}"
         else:
             message_with_context = f"[SYSTEM: {datetime_context}]\n\nUser message: {message}"
+
+        # 0. Handle HELP command
+        if message_type == 'help':
+            logger.info("[agents.py] Routing to Help handler.")
+            return await handle_help_command(user_data)
 
         # 1. Handle 'mail me' command
         if message_type == 'mail_me':

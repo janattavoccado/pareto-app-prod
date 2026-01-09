@@ -1,0 +1,43 @@
+Pareto --help
+
+Adding a new lead or task in the CRM database
+-------------------------------------------------
+Message by audio or text by using the following words to trigger the Personal Assistant:
+- "Add in CRM ..."
+- "Create in CRM ..."
+- "Store in CRM ..."
+- "Add a new lead ..."
+- "Create a new lead ..."
+- "Store a new lead ..."
+
+Read a lead or task in the CRM database
+-------------------------------------------------
+Message by audio or text by using the following words to trigger the Personal Assistant:
+- "Get in CRM ..."
+- "Fetch in CRM ..."
+- "Read in CRM ..."
+- "Get the lead ..."
+- "Fetch the lead ..."
+- "Read the lead ..."
+
+Mailing yourself a note, task or information
+-------------------------------------------------
+Message by audio or text by using the following words to trigger the Mailing Assistant:
+- "Mail me ..."
+- "Email me ..."
+- "Mail me the note ..."
+- "Email me the note ..."
+
+Booking a new meeting or event in your calendar
+-------------------------------------------------
+Message by audio or text by using the following words to trigger the Personal Assistant:
+- "Book a meeting...<Date: "dd/mm/yyyy", "Today", "Tomorrow">, <Time: "24 hour format", "12 hour format">, <Location: (option)>, <Attendees: (option)>
+- "Create a meeting...<Date: "dd/mm/yyyy", "Today", "Tomorrow">, <Time: "24 hour format", "12 hour format">, <Location: (option)>, <Attendees: (option)>
+Note: order of this information is not important.
+Verified language support:
+- En
+- Hr
+- Se
+Theoretically the most Europen languages should be working with your requests or instructions with Pareto.
+
+
